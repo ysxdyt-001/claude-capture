@@ -39,6 +39,7 @@ Options:
   --captures <path>     captures output directory     (default ~/.claude-capture/captures)
   --no-browser          do not auto-open the viewer in browser
   --no-mitmweb-browser  do not auto-open the mitmweb Web UI in browser
+  --claude <bin>        CLI to launch & capture (default: claude, env: CLAUDE_CAPTURE_CLAUDE)
   -h, --help            show this help
 
 Anything after "--" is forwarded verbatim to claude.
@@ -46,6 +47,7 @@ Examples:
   claude-capture
   claude-capture --port-proxy 9090
   claude-capture -- --model opus-4-6 --resume
+  claude-capture --claude acme-claude
 `.trim();
 }
 
@@ -61,6 +63,9 @@ function parseArgs(argv) {
     openBrowser: true,
     openMitmwebBrowser: true,
     claudeArgs: [],
+    // CLI bin to capture: flag > env > default "claude".
+    // 三方套壳 CLI（基于 Claude Code 二次开发）可通过此参数指定。
+    claudeBin: process.env.CLAUDE_CAPTURE_CLAUDE || "claude",
   };
   let i = 0;
   while (i < argv.length) {
@@ -86,6 +91,8 @@ function parseArgs(argv) {
       opts.openBrowser = false;
     } else if (a === "--no-mitmweb-browser") {
       opts.openMitmwebBrowser = false;
+    } else if (a === "--claude") {
+      opts.claudeBin = argv[++i];
     } else if (a.startsWith("--port-proxy=")) {
       opts.portProxy = Number(a.slice("--port-proxy=".length));
       opts.portProxyExplicit = true;
@@ -97,6 +104,8 @@ function parseArgs(argv) {
       opts.portMitmwebExplicit = true;
     } else if (a.startsWith("--captures=")) {
       opts.captures = path.resolve(a.slice("--captures=".length));
+    } else if (a.startsWith("--claude=")) {
+      opts.claudeBin = a.slice("--claude=".length);
     } else {
       process.stderr.write(`unknown option: ${a}\n${usage()}\n`);
       process.exit(2);
