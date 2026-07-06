@@ -262,11 +262,12 @@ async function preflight(opts) {
     }
   }
 
-  // 3. claude binary
-  if (!which("claude")) {
+  // 3. claude binary (or third-party Claude-like CLI when overridden).
+  if (!which(opts.claudeBin)) {
     errors.push(
-      `  • claude not found on PATH\n` +
-      `    install Claude Code CLI:  https://claude.ai/code`
+      `  • ${opts.claudeBin} not found on PATH\n` +
+      `    install Claude Code CLI:  https://claude.ai/code\n` +
+      `    or override with --claude <bin> / CLAUDE_CAPTURE_CLAUDE=<bin>`
     );
   }
 
