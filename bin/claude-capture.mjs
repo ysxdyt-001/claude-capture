@@ -39,6 +39,7 @@ Options:
   --captures <path>     captures output directory     (default ~/.claude-capture/captures)
   --no-browser          do not auto-open the viewer in browser
   --no-mitmweb-browser  do not auto-open the mitmweb Web UI in browser
+  --claude <bin>        CLI to launch & capture (default: claude, env: CLAUDE_CAPTURE_CLAUDE)
   -h, --help            show this help
 
 Anything after "--" is forwarded verbatim to claude.
@@ -46,6 +47,7 @@ Examples:
   claude-capture
   claude-capture --port-proxy 9090
   claude-capture -- --model opus-4-6 --resume
+  claude-capture --claude acme-claude
 `.trim();
 }
 
@@ -61,6 +63,9 @@ function parseArgs(argv) {
     openBrowser: true,
     openMitmwebBrowser: true,
     claudeArgs: [],
+    // CLI bin to capture: flag > env > default "claude".
+    // 三方套壳 CLI（基于 Claude Code 二次开发）可通过此参数指定。
+    claudeBin: process.env.CLAUDE_CAPTURE_CLAUDE || "claude",
   };
   let i = 0;
   while (i < argv.length) {
@@ -86,6 +91,8 @@ function parseArgs(argv) {
       opts.openBrowser = false;
     } else if (a === "--no-mitmweb-browser") {
       opts.openMitmwebBrowser = false;
+    } else if (a === "--claude") {
+      opts.claudeBin = argv[++i];
     } else if (a.startsWith("--port-proxy=")) {
       opts.portProxy = Number(a.slice("--port-proxy=".length));
       opts.portProxyExplicit = true;
@@ -97,6 +104,8 @@ function parseArgs(argv) {
       opts.portMitmwebExplicit = true;
     } else if (a.startsWith("--captures=")) {
       opts.captures = path.resolve(a.slice("--captures=".length));
+    } else if (a.startsWith("--claude=")) {
+      opts.claudeBin = a.slice("--claude=".length);
     } else {
       process.stderr.write(`unknown option: ${a}\n${usage()}\n`);
       process.exit(2);
@@ -253,11 +262,12 @@ async function preflight(opts) {
     }
   }
 
-  // 3. claude binary
-  if (!which("claude")) {
+  // 3. claude binary (or third-party Claude-like CLI when overridden).
+  if (!which(opts.claudeBin)) {
     errors.push(
-      `  • claude not found on PATH\n` +
-      `    install Claude Code CLI:  https://claude.ai/code`
+      `  • ${opts.claudeBin} not found on PATH\n` +
+      `    install Claude Code CLI:  https://claude.ai/code\n` +
+      `    or override with --claude <bin> / CLAUDE_CAPTURE_CLAUDE=<bin>`
     );
   }
 
@@ -325,7 +335,7 @@ async function main() {
   process.stdout.write(`  proxy    : http://127.0.0.1:${opts.portProxy}  (mitmweb + addon)\n`);
   process.stdout.write(`  mitmweb  : http://127.0.0.1:${opts.portMitmweb}  (raw flow inspector)\n`);
   process.stdout.write(`  viewer   : http://127.0.0.1:${opts.portViewer}  (anthropic captures)\n`);
-  process.stdout.write(`  claude   : starting${opts.claudeArgs.length ? ` with ${JSON.stringify(opts.claudeArgs)}` : ""}\n`);
+  process.stdout.write(`  ${opts.claudeBin}   : starting${opts.claudeArgs.length ? ` with ${JSON.stringify(opts.claudeArgs)}` : ""}\n`);
   if (opts._portNotes?.length) {
     process.stdout.write(`  notes    : ${opts._portNotes.join("; ")}\n`);
   }
@@ -380,7 +390,7 @@ async function main() {
     NODE_USE_ENV_PROXY: "1",
     NODE_EXTRA_CA_CERTS: MITM_CA,
   };
-  const claude = spawn("claude", opts.claudeArgs, {
+  const claude = spawn(opts.claudeBin, opts.claudeArgs, {
     env: claudeEnv,
     stdio: "inherit",
     shell: IS_WIN,
@@ -401,6 +411,14 @@ async function main() {
   };
   process.on("SIGINT", () => cleanup("SIGINT"));
   process.on("SIGTERM", () => cleanup("SIGTERM"));
+
+  // Spawn-time 错误兜底：preflight 通过 → spawn 之间出现竞态（bin 被删 / PATH 改动）
+  // 时，没有 'error' 事件 Node 会抛裸 stack。这里转成可读的 fatal 后再清理。
+  claude.on("error", (err) => {
+    process.stderr.write(`\n  fatal: ${opts.claudeBin} failed to start: ${err.message}\n\n`);
+    try { mitm.kill("SIGTERM"); } catch {}
+    setTimeout(() => process.exit(1), 100);
+  });
 
   claude.on("exit", (code) => {
     try { mitm.kill("SIGTERM"); } catch {}

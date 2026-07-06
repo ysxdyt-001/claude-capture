@@ -86,7 +86,7 @@ This is the default behavior — you don't have to do anything. If you explicitl
 
 ```
 claude-capture [--port-proxy <n>] [--port-mitmweb <n>] [--port-viewer <n>]
-               [--captures <path>] [--no-browser]
+               [--captures <path>] [--no-browser] [--claude <bin>]
                [-- <claude-args>...]
 ```
 
@@ -97,7 +97,8 @@ claude-capture [--port-proxy <n>] [--port-mitmweb <n>] [--port-viewer <n>]
 | `--port-viewer` | `8090` | viewer HTTP port (auto-picks next free if busy) |
 | `--captures` | `~/.claude-capture/captures` | JSON output directory |
 | `--no-browser` | off | skip auto-opening the viewer |
-| `-- <args>` | — | everything after `--` is forwarded to `claude` |
+| `--claude <bin>` | `claude` (env: `CLAUDE_CAPTURE_CLAUDE`) | CLI to launch & capture — set this to inspect a third-party Claude-like CLI (e.g. `acme-claude`) |
+| `-- <args>` | — | everything after `--` is forwarded to the launched CLI |
 
 Examples:
 
@@ -114,6 +115,10 @@ claude-capture -- --model opus-4-6 --resume
 
 # Suppress the browser (you'll open it manually)
 claude-capture --no-browser
+
+# Capture a third-party Claude-like CLI instead of `claude`
+claude-capture --claude acme-claude
+# Or set it once via env:  export CLAUDE_CAPTURE_CLAUDE=acme-claude
 ```
 
 ## Two inspector surfaces
