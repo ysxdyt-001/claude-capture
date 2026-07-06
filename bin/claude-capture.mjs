@@ -335,7 +335,7 @@ async function main() {
   process.stdout.write(`  proxy    : http://127.0.0.1:${opts.portProxy}  (mitmweb + addon)\n`);
   process.stdout.write(`  mitmweb  : http://127.0.0.1:${opts.portMitmweb}  (raw flow inspector)\n`);
   process.stdout.write(`  viewer   : http://127.0.0.1:${opts.portViewer}  (anthropic captures)\n`);
-  process.stdout.write(`  claude   : starting${opts.claudeArgs.length ? ` with ${JSON.stringify(opts.claudeArgs)}` : ""}\n`);
+  process.stdout.write(`  ${opts.claudeBin}   : starting${opts.claudeArgs.length ? ` with ${JSON.stringify(opts.claudeArgs)}` : ""}\n`);
   if (opts._portNotes?.length) {
     process.stdout.write(`  notes    : ${opts._portNotes.join("; ")}\n`);
   }
@@ -390,7 +390,7 @@ async function main() {
     NODE_USE_ENV_PROXY: "1",
     NODE_EXTRA_CA_CERTS: MITM_CA,
   };
-  const claude = spawn("claude", opts.claudeArgs, {
+  const claude = spawn(opts.claudeBin, opts.claudeArgs, {
     env: claudeEnv,
     stdio: "inherit",
     shell: IS_WIN,
@@ -411,6 +411,14 @@ async function main() {
   };
   process.on("SIGINT", () => cleanup("SIGINT"));
   process.on("SIGTERM", () => cleanup("SIGTERM"));
+
+  // Spawn-time 错误兜底：preflight 通过 → spawn 之间出现竞态（bin 被删 / PATH 改动）
+  // 时，没有 'error' 事件 Node 会抛裸 stack。这里转成可读的 fatal 后再清理。
+  claude.on("error", (err) => {
+    process.stderr.write(`\n  fatal: ${opts.claudeBin} failed to start: ${err.message}\n\n`);
+    try { mitm.kill("SIGTERM"); } catch {}
+    setTimeout(() => process.exit(1), 100);
+  });
 
   claude.on("exit", (code) => {
     try { mitm.kill("SIGTERM"); } catch {}
