@@ -33,8 +33,9 @@ function usage() {
 Usage: claude-capture [options] [-- <claude-args>...]
 
 Options:
-  --port-proxy <n>      mitmproxy listen port        (default 8080)
-  --port-viewer <n>     viewer HTTP port              (default 8090)
+  --port-proxy <n>      mitmweb proxy listen port      (default 8080, auto-picks next free if busy)
+  --port-mitmweb <n>    mitmweb Web UI port            (default 8081, auto-picks next free if busy)
+  --port-viewer <n>     viewer HTTP port               (default 8090, auto-picks next free if busy)
   --captures <path>     captures output directory     (default ~/.claude-capture/captures)
   --no-browser          do not auto-open the viewer in browser
   -h, --help            show this help
@@ -51,6 +52,10 @@ function parseArgs(argv) {
   const opts = {
     portProxy: 8080,
     portViewer: 8090,
+    portMitmweb: 8081,
+    portProxyExplicit: false,
+    portViewerExplicit: false,
+    portMitmwebExplicit: false,
     captures: path.join(os.homedir(), ".claude-capture", "captures"),
     openBrowser: true,
     claudeArgs: [],
@@ -66,16 +71,26 @@ function parseArgs(argv) {
       process.exit(0);
     } else if (a === "--port-proxy") {
       opts.portProxy = Number(argv[++i]);
+      opts.portProxyExplicit = true;
     } else if (a === "--port-viewer") {
       opts.portViewer = Number(argv[++i]);
+      opts.portViewerExplicit = true;
+    } else if (a === "--port-mitmweb") {
+      opts.portMitmweb = Number(argv[++i]);
+      opts.portMitmwebExplicit = true;
     } else if (a === "--captures") {
       opts.captures = path.resolve(argv[++i]);
     } else if (a === "--no-browser") {
       opts.openBrowser = false;
     } else if (a.startsWith("--port-proxy=")) {
       opts.portProxy = Number(a.slice("--port-proxy=".length));
+      opts.portProxyExplicit = true;
     } else if (a.startsWith("--port-viewer=")) {
       opts.portViewer = Number(a.slice("--port-viewer=".length));
+      opts.portViewerExplicit = true;
+    } else if (a.startsWith("--port-mitmweb=")) {
+      opts.portMitmweb = Number(a.slice("--port-mitmweb=".length));
+      opts.portMitmwebExplicit = true;
     } else if (a.startsWith("--captures=")) {
       opts.captures = path.resolve(a.slice("--captures=".length));
     } else {
@@ -119,14 +134,63 @@ function parseMitmproxyMajor(output) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-// Test whether we can bind on the port (i.e. nothing else is listening).
-function isPortFree(port, host = "127.0.0.1") {
+// Test whether we can bind on the port. We try BOTH 0.0.0.0 and 127.0.0.1
+// because macOS's SO_REUSEADDR behavior is asymmetric:
+//   • binding 127.0.0.1 misses conflicts on 0.0.0.0
+//   • binding 0.0.0.0   misses conflicts on 127.0.0.1
+// Only if BOTH succeed do we consider the port free.
+function tryBind(port, host) {
   return new Promise((resolve) => {
     const srv = net.createServer();
     srv.once("error", () => resolve(false));
     srv.once("listening", () => srv.close(() => resolve(true)));
     srv.listen(port, host);
   });
+}
+async function isPortFree(port) {
+  return (await tryBind(port, "0.0.0.0")) && (await tryBind(port, "127.0.0.1"));
+}
+
+// Find the first free port starting from `startPort`. Returns null after maxTries.
+function findFreePort(startPort, maxTries = 50) {
+  return (async () => {
+    for (let offset = 0; offset < maxTries; offset++) {
+      const port = startPort + offset;
+      if (await isPortFree(port)) return port;
+    }
+    return null;
+  })();
+}
+
+// Pick a port: if user didn't explicitly request one, auto-pick the first free
+// port starting from the default. If user did request one, validate it's free.
+// `chosen` tracks ports already picked by previous resolvePort calls so we
+// don't accidentally double-assign.
+async function resolvePort(label, portKey, explicitKey, opts, notes, chosen) {
+  const wanted = opts[portKey];
+  if (opts[explicitKey]) {
+    // User explicitly chose this port — must be free or hard error.
+    if (!(await isPortFree(wanted))) {
+      return { error: `port ${wanted} (${label}) is already in use — free it or pick a different --port-${label}` };
+    }
+    chosen.add(wanted);
+    return {};
+  }
+  // Default behavior — find first free starting from the default, skipping any
+  // port already claimed by a previous resolver.
+  for (let offset = 0; offset < 50; offset++) {
+    const candidate = wanted + offset;
+    if (chosen.has(candidate)) continue;
+    if (await isPortFree(candidate)) {
+      opts[portKey] = candidate;
+      chosen.add(candidate);
+      if (candidate !== wanted) {
+        notes.push(`port ${wanted} (${label}) busy → using ${candidate}`);
+      }
+      return {};
+    }
+  }
+  return { error: `no free port found in range ${wanted}-${wanted + 49} (${label})` };
 }
 
 // Wait until something answers on the port (used to detect when mitmweb is up).
@@ -162,7 +226,9 @@ async function preflight(opts) {
     );
   }
 
-  // 2. mitmweb binary + version
+  // 2. mitmweb binary + version. We keep mitmweb (not mitmdump) because its
+  //    Web UI is valuable — users can inspect every raw request, not just the
+  //    Anthropic ones our addon captures.
   if (!which("mitmweb")) {
     errors.push(
       `  • mitmweb not found on PATH\n` +
@@ -199,16 +265,16 @@ async function preflight(opts) {
     );
   }
 
-  // 5. Ports must be free (we'll bind viewer in-process; mitmweb spawns its own listener).
-  for (const [label, port] of [["proxy", opts.portProxy], ["viewer", opts.portViewer]]) {
-    const free = await isPortFree(port);
-    if (!free) {
-      errors.push(
-        `  • port ${port} (${label}) is already in use\n` +
-        `    free it, or override:  --port-${label} <other-port>`
-      );
-    }
-  }
+  // 5. Ports: auto-pick next free port if default is taken (only when user
+  //    did NOT pass --port-* explicitly).
+  const portNotes = [];
+  const chosen = new Set();
+  const proxyRes = await resolvePort("proxy", "portProxy", "portProxyExplicit", opts, portNotes, chosen);
+  if (proxyRes.error) errors.push(`  • ${proxyRes.error}`);
+  const mitmwebRes = await resolvePort("mitmweb-ui", "portMitmweb", "portMitmwebExplicit", opts, portNotes, chosen);
+  if (mitmwebRes.error) errors.push(`  • ${mitmwebRes.error}`);
+  const viewerRes = await resolvePort("viewer", "portViewer", "portViewerExplicit", opts, portNotes, chosen);
+  if (viewerRes.error) errors.push(`  • ${viewerRes.error}`);
 
   // 6. Anthropic auth env vars (soft warning — claude may use a config file instead).
   const hasToken = !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
@@ -221,6 +287,8 @@ async function preflight(opts) {
   if (warnings.length) {
     process.stderr.write("\n  Warnings:\n\n" + warnings.join("\n") + "\n");
   }
+  // Stash port notes so main() can print them after the banner.
+  opts._portNotes = portNotes;
   if (errors.length) {
     process.stderr.write("\n  Preflight failed:\n\n" + errors.join("\n") + "\n\n");
     process.exit(1);
@@ -251,8 +319,13 @@ async function main() {
   process.stdout.write(BANNER + "\n");
   process.stdout.write(`  captures : ${opts.captures}\n`);
   process.stdout.write(`  proxy    : http://127.0.0.1:${opts.portProxy}  (mitmweb + addon)\n`);
-  process.stdout.write(`  viewer   : http://127.0.0.1:${opts.portViewer}\n`);
-  process.stdout.write(`  claude   : starting${opts.claudeArgs.length ? ` with ${JSON.stringify(opts.claudeArgs)}` : ""}\n\n`);
+  process.stdout.write(`  mitmweb  : http://127.0.0.1:${opts.portMitmweb}  (raw flow inspector)\n`);
+  process.stdout.write(`  viewer   : http://127.0.0.1:${opts.portViewer}  (anthropic captures)\n`);
+  process.stdout.write(`  claude   : starting${opts.claudeArgs.length ? ` with ${JSON.stringify(opts.claudeArgs)}` : ""}\n`);
+  if (opts._portNotes?.length) {
+    process.stdout.write(`  notes    : ${opts._portNotes.join("; ")}\n`);
+  }
+  process.stdout.write("\n");
 
   // 1) 起 viewer（in-process）
   await startServer({
@@ -261,11 +334,13 @@ async function main() {
     publicDir: PUBLIC_DIR,
   });
 
-  // 2) spawn mitmweb (Windows: shell=true so mitmweb.exe / mitmweb.cmd resolve via PATH)
+  // 2) spawn mitmweb — proxy port + addon + Web UI (valuable: shows every raw
+  //    request, not just the Anthropic ones our addon captures).
   const mitm = spawn(
     "mitmweb",
     [
       "-p", String(opts.portProxy),
+      "--web-port", String(opts.portMitmweb),
       "-s", ADDON_PATH,
       "--set", "web_open_browser=false",
       "--set", "console_eventlog_verbosity=warn",

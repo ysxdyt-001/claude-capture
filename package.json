@@ -1,6 +1,6 @@
 {
   "name": "claude-capture",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Capture and inspect Claude Code ↔ Anthropic HTTP traffic via mitmproxy, with a built-in viewer UI.",
   "bin": {
     "claude-capture": "bin/claude-capture.mjs"
@@ -9,6 +9,26 @@
   "engines": {
     "node": ">=20"
   },
+  "license": "MIT",
+  "author": "ysxdyt-001",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ysxdyt-001/claude-capture.git"
+  },
+  "homepage": "https://github.com/ysxdyt-001/claude-capture#readme",
+  "bugs": {
+    "url": "https://github.com/ysxdyt-001/claude-capture/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "mitmproxy",
+    "anthropic",
+    "capture",
+    "debug",
+    "proxy",
+    "inspector"
+  ],
   "files": [
     "bin",
     "lib",

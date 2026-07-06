@@ -1,14 +1,28 @@
 # claude-capture
 
-Capture and inspect Claude Code ↔ Anthropic HTTP traffic through a local mitmproxy, with a built-in visualization viewer. One command spins up the proxy, the viewer, and Claude Code itself — everything works out of the box.
+Capture and inspect Claude Code ↔ Anthropic HTTP traffic through a local mitmproxy, with a built-in visualization viewer. One command spins up the proxy, mitmweb's raw flow inspector, the friendly viewer, and Claude Code itself — everything works out of the box.
+
+## Install
+
+```bash
+npm install -g claude-capture
+```
+
+Verify:
+
+```bash
+claude-capture --help
+```
 
 ## One-time setup
 
 ### 1. Install mitmproxy
 
-```bash
-brew install mitmproxy
-```
+| Platform | Command |
+|---|---|
+| macOS | `brew install mitmproxy` |
+| Linux | `sudo apt install mitmproxy` (or `pip install mitmproxy`) |
+| Windows | installer from <https://mitmproxy.org/downloads/> (or `pip install mitmproxy`) |
 
 ### 2. Generate the mitmproxy CA cert
 
@@ -18,19 +32,15 @@ mitmweb
 ls ~/.mitmproxy/mitmproxy-ca-cert.pem   # should exist now
 ```
 
-### 3. Install this CLI globally
-
-From the project root:
+### 3. Confirm Claude Code CLI is installed
 
 ```bash
-npm install -g .
+claude --version
 ```
 
-Verify:
+If not, install from <https://claude.ai/code>.
 
-```bash
-claude-capture --help
-```
+That's it — every other requirement is checked at runtime by the preflight.
 
 ## Daily use
 
@@ -42,24 +52,49 @@ claude-capture
 ```
 
 What happens:
-- mitmproxy starts on `:8080` (loaded with the dump addon)
-- viewer UI is served on `:8090` (browser auto-opens on macOS)
-- claude launches with proxy env vars wired in
 
-Use Claude Code normally. Every `/v1/messages` request gets dumped to `~/.claude-capture/captures/<timestamp>_<host>_<path>.json`, and shows up in the viewer (auto-refresh every 3s).
+```
+  claude-capture · inspect Claude Code ↔ Anthropic HTTP traffic
 
-`Ctrl+C` exits claude → proxy and viewer clean up automatically.
+  captures : /Users/you/.claude-capture/captures
+  proxy    : http://127.0.0.1:8080  (mitmweb + addon)
+  mitmweb  : http://127.0.0.1:8081  (raw flow inspector)
+  viewer   : http://127.0.0.1:8090  (anthropic captures)
+  claude   : starting
+```
+
+- **mitmweb** starts with the dump addon loaded, exposing both a proxy (default `:8080`) and its raw Web UI (default `:8081`) — use it to inspect *every* HTTP request, not just Anthropic ones
+- **viewer** is served on `:8090` (browser auto-opens) — friendly UI for the captured Anthropic traffic
+- **claude** launches with `HTTPS_PROXY` / `HTTP_PROXY` / `NODE_EXTRA_CA_CERTS` wired in, so every `/v1/messages` call routes through the proxy and lands in `~/.claude-capture/captures/`
+
+`Ctrl+C` exits claude → mitmweb and viewer clean up automatically.
+
+### Auto port-pick (no need to manage ports)
+
+If a default port is already taken, `claude-capture` silently picks the next free one and prints it in the banner:
+
+```
+  proxy    : http://127.0.0.1:8082  (mitmweb + addon)
+  mitmweb  : http://127.0.0.1:8083  (raw flow inspector)
+  viewer   : http://127.0.0.1:8091  (anthropic captures)
+  notes    : port 8080 (proxy) busy → using 8082; port 8081 (mitmweb-ui) busy → using 8083; port 8090 (viewer) busy → using 8091
+```
+
+This is the default behavior — you don't have to do anything. If you explicitly pass `--port-*` for a port that's busy, `claude-capture` will refuse (it won't silently override your choice).
 
 ## Options
 
 ```
-claude-capture [--port-proxy <n>] [--port-viewer <n>] [--captures <path>] [--no-browser] [-- <claude-args>...]
+claude-capture [--port-proxy <n>] [--port-mitmweb <n>] [--port-viewer <n>]
+               [--captures <path>] [--no-browser]
+               [-- <claude-args>...]
 ```
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--port-proxy` | `8080` | mitmproxy listen port |
-| `--port-viewer` | `8090` | viewer HTTP port |
+| `--port-proxy` | `8080` | mitmweb proxy listen port (auto-picks next free if busy) |
+| `--port-mitmweb` | `8081` | mitmweb Web UI port (auto-picks next free if busy) |
+| `--port-viewer` | `8090` | viewer HTTP port (auto-picks next free if busy) |
 | `--captures` | `~/.claude-capture/captures` | JSON output directory |
 | `--no-browser` | off | skip auto-opening the viewer |
 | `-- <args>` | — | everything after `--` is forwarded to `claude` |
@@ -67,8 +102,9 @@ claude-capture [--port-proxy <n>] [--port-viewer <n>] [--captures <path>] [--no-
 Examples:
 
 ```bash
-# Custom ports (e.g. 8080 is taken)
-claude-capture --port-proxy 9090 --port-viewer 9091
+# Pin specific ports (here 8081 is taken; claude-capture will refuse rather
+# than silently change your explicit choice)
+claude-capture --port-mitmweb 8181
 
 # Per-project captures
 claude-capture --captures ./my-captures
@@ -80,9 +116,18 @@ claude-capture -- --model opus-4-6 --resume
 claude-capture --no-browser
 ```
 
-## Viewer UI
+## Two inspector surfaces
 
-The viewer at `http://127.0.0.1:8090` provides five tabs per capture:
+`claude-capture` gives you **two complementary UIs** running at the same time:
+
+| UI | Default port | What it's for |
+|---|---|---|
+| **mitmweb** | `:8081` | Every HTTP flow Claude Code makes — DNS lookups, telemetry, anything else beyond `/v1/messages`. Raw request/response inspector, no parsing. |
+| **viewer** | `:8090` | Curated view of just the Anthropic traffic: reconstructed conversation, SSE timeline, request/response breakdowns, syntax-highlighted JSON. |
+
+Open both — they refresh independently.
+
+### Viewer tabs
 
 | Tab | Content |
 |---|---|
@@ -130,16 +175,19 @@ File structure (per request):
 
 Non-streaming responses use `response.body` instead of `response.sse_events`.
 
-## Requirements
+## Preflight checks
 
-- **Node.js ≥ 20**
-- **mitmproxy ≥ 10** — install via:
-  - macOS: `brew install mitmproxy`
-  - Linux: `sudo apt install mitmproxy` (or `pip install mitmproxy`)
-  - Windows: download the installer from <https://mitmproxy.org/downloads/> (or `pip install mitmproxy`)
-- **Claude Code CLI** on PATH
+Every run validates the environment before doing anything destructive:
 
-The CLI preflights all of these on every run (Node version, binary presence, mitmproxy version, CA cert, port availability, optional Anthropic env vars) and exits with a clear hint if anything is missing.
+| Check | Failure behavior |
+|---|---|
+| Node.js ≥ 20 | error + upgrade hint |
+| `mitmweb` on PATH | error + per-platform install command |
+| `claude` on PATH | error + install link |
+| mitmproxy ≥ 10 | error + upgrade command |
+| `~/.mitmproxy/mitmproxy-ca-cert.pem` exists | error + "run mitmweb once" hint |
+| Three ports free (or auto-picked) | auto-pick next free; hard error only if you passed `--port-*` explicitly |
+| `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` env | soft warning (claude may use a config file instead) |
 
 ### Platform notes
 
@@ -176,6 +224,12 @@ On Windows, the mitmproxy CA cert lives at `%USERPROFILE%\.mitmproxy\mitmproxy-c
 |---|---|---|
 | `mitmproxy CA cert missing` | haven't run mitmweb yet | `mitmweb` once, Ctrl+C after the proxy starts |
 | Claude Code reports TLS errors | `NODE_EXTRA_CA_CERTS` not picked up | make sure you're on Node ≥ 20 and launching via `claude-capture` (not bare `claude`) |
-| No captures appearing | claude bypassing proxy | verify `echo $HTTPS_PROXY` inside claude's env; check mitmweb isn't 8080-shadowed |
-| `mitmweb: command not found` | mitmproxy not installed | `brew install mitmproxy` |
-| Port already in use | another process on 8080/8090 | `claude-capture --port-proxy 9090 --port-viewer 9091` |
+| No captures appearing | claude bypassing proxy | verify `echo $HTTPS_PROXY` inside claude's env |
+| `mitmweb: command not found` | mitmproxy not installed | see [One-time setup](#1-install-mitmproxy) |
+| Banner says `port X busy → using Y` | another process on a default port | no action needed — auto-picked. Or use the printed URL |
+| `port X (Y) is already in use — free it or pick a different --port-Y` | you passed `--port-*` explicitly and that port is taken | either free the port or remove the flag (let claude-capture auto-pick) |
+| `no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in env` (warning) | soft warning — claude may use a config file | safe to ignore if claude works; otherwise export the env var |
+
+## License
+
+MIT
