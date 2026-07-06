@@ -1,0 +1,1821 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f7f4ee">
+<title>Capture Inspector · Claude Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Paper palette — warm cream with soft undertones */
+    --paper: #f7f4ee;
+    --paper-2: #fbf9f4;
+    --panel: #ffffff;
+    --panel-2: #fbfaf6;
+    --elevated: #f3efe6;
+    --hover: #efe9dd;
+
+    /* Lines */
+    --line: #e6dfd1;
+    --line-2: #d9d1bf;
+    --line-faint: #ede7d8;
+
+    /* Text */
+    --text: #2a2a26;
+    --text-dim: #6b6960;
+    --text-faint: #a8a496;
+
+    /* Primary — forest sage */
+    --sage: #5a7d52;
+    --sage-bright: #6f9764;
+    --sage-deep: #3d5c39;
+    --sage-dim: rgba(90, 125, 82, 0.10);
+
+    /* Accents */
+    --clay: #c97b5e;            /* warm terracotta */
+    --clay-dim: rgba(201, 123, 94, 0.12);
+    --sky: #6b95b8;             /* soft sky blue */
+    --sky-dim: rgba(107, 149, 184, 0.10);
+    --plum: #9c7ba8;            /* gentle plum */
+    --honey: #c9a44e;
+
+    /* Type */
+    --font-display: "Instrument Serif", "Times New Roman", serif;
+    --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; padding: 0;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--paper);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Atmospheric layered background — soft warm wash */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(ellipse 70% 50% at 15% 0%, rgba(90, 125, 82, 0.06), transparent 60%),
+      radial-gradient(ellipse 60% 40% at 95% 100%, rgba(201, 164, 78, 0.05), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(107, 149, 184, 0.025), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(60, 50, 30, 0.018) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(60, 50, 30, 0.018) 1px, transparent 1px);
+    background-size: 36px 36px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    height: 100vh;
+  }
+
+  /* ============ SIDEBAR ============ */
+  .sidebar {
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--paper-2) 0%, var(--paper) 100%);
+  }
+
+  .sidebar-header {
+    padding: 24px 24px 20px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  .sidebar-header::after {
+    content: "";
+    position: absolute; left: 24px; right: 24px; bottom: -1px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--sage) 50%, transparent);
+    opacity: 0.35;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--sage);
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--sage-bright);
+    box-shadow: 0 0 0 3px rgba(111, 151, 100, 0.18);
+    animation: pulse 2.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(111, 151, 100, 0.18); }
+    50% { box-shadow: 0 0 0 6px rgba(111, 151, 100, 0.06); }
+  }
+
+  .sidebar-header h1 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: -0.015em;
+    color: var(--text);
+    line-height: 1.05;
+  }
+  .sidebar-header h1 em {
+    font-style: italic;
+    color: var(--sage-deep);
+  }
+  .sidebar-header .sub {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+
+  .file-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  .file-item {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--line-faint);
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    position: relative;
+    animation: slideIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .file-item:hover {
+    background: var(--panel-2);
+  }
+  .file-item.active {
+    background: linear-gradient(90deg, var(--sage-dim) 0%, transparent 100%);
+  }
+  .file-item.active::before {
+    content: "";
+    position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px;
+    background: var(--sage-bright);
+    border-radius: 0 2px 2px 0;
+  }
+  .file-item .preview {
+    color: var(--text);
+    margin-bottom: 8px;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    font-size: 12.5px;
+  }
+  .file-item .meta {
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-family: var(--font-mono);
+    display: flex; gap: 10px; align-items: center;
+    letter-spacing: 0.02em;
+  }
+
+  .badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+    border: 1px solid transparent;
+  }
+  .badge.ok {
+    background: var(--sage-dim);
+    color: var(--sage-deep);
+    border-color: rgba(90, 125, 82, 0.25);
+  }
+  .badge.err {
+    background: var(--clay-dim);
+    color: var(--clay);
+    border-color: rgba(201, 123, 94, 0.3);
+  }
+  .badge.neutral {
+    background: var(--elevated);
+    color: var(--text-dim);
+    border-color: var(--line);
+  }
+
+  /* ============ MAIN ============ */
+  .main {
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    background: var(--paper);
+  }
+
+  .toolbar {
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--line);
+    display: flex; gap: 14px; align-items: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--paper-2);
+  }
+  .toolbar #currentFile {
+    color: var(--text);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .toolbar #currentFile::before {
+    content: "▸ ";
+    color: var(--sage-bright);
+  }
+  .toolbar button {
+    background: var(--panel);
+    border: 1px solid var(--line-2);
+    color: var(--text-dim);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    transition: all 0.2s ease;
+  }
+  .toolbar button:hover {
+    background: var(--sage-dim);
+    color: var(--sage-deep);
+    border-color: var(--sage-bright);
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    background: var(--paper-2);
+    padding: 0 24px;
+  }
+  .tab {
+    padding: 14px 18px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    position: relative;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--sage-deep);
+    border-bottom-color: var(--sage-bright);
+  }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 30px 40px 60px;
+    animation: fadeIn 0.35s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .empty {
+    color: var(--text-faint);
+    text-align: center;
+    padding: 110px 20px;
+  }
+  .empty .big {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 46px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+  }
+  .empty .small {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .empty .arrow {
+    display: inline-block;
+    margin-right: 8px;
+    color: var(--sage-bright);
+    animation: nudge 2.2s ease-in-out infinite;
+  }
+  @keyframes nudge {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-5px); }
+  }
+
+  /* ============ CONVERSATION ============ */
+  .meta-table {
+    margin-bottom: 28px;
+    padding: 18px 24px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    position: relative;
+    box-shadow: 0 1px 3px rgba(80, 70, 50, 0.04);
+  }
+  .meta-table::before {
+    content: "";
+    position: absolute; left: 0; top: 14px; bottom: 14px; width: 2px;
+    background: var(--sage-bright);
+    border-radius: 0 2px 2px 0;
+    opacity: 0.7;
+  }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 170px 1fr;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line-faint);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .kv:last-child { border-bottom: none; }
+  .kv .k {
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    font-size: 10.5px;
+    padding-top: 2px;
+  }
+
+  h3.section {
+    margin: 36px 0 14px;
+    color: var(--sage);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    display: flex; align-items: center; gap: 14px;
+  }
+  h3.section::after {
+    content: "";
+    flex: 1; height: 1px;
+    background: linear-gradient(90deg, var(--line-2), transparent);
+  }
+
+  .msg {
+    position: relative;
+    margin-bottom: 14px;
+    padding: 16px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    animation: msgIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    box-shadow: 0 1px 2px rgba(80, 70, 50, 0.03);
+  }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .msg:hover {
+    border-color: var(--line-2);
+    box-shadow: 0 2px 6px rgba(80, 70, 50, 0.06);
+  }
+  .msg.user {
+    background: var(--panel-2);
+    border-left: 3px solid var(--sky);
+  }
+  .msg.assistant {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border-left: 3px solid var(--sage-bright);
+  }
+  .msg.tool {
+    background: var(--paper-2);
+    border-left: 3px solid var(--text-faint);
+  }
+  .msg.system {
+    background: var(--panel-2);
+    border-left: 3px solid var(--honey);
+    border-style: dashed;
+  }
+  .msg.system .msg-role { color: var(--honey); }
+
+  .turn-num {
+    position: absolute;
+    top: 14px; right: 16px;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--line-2);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    user-select: none;
+  }
+
+  .msg-role {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin-bottom: 10px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .msg-role::before {
+    content: "";
+    width: 14px; height: 1px;
+    background: var(--text-faint);
+  }
+  .msg.user .msg-role { color: var(--sky); }
+  .msg.assistant .msg-role { color: var(--sage); }
+
+  .msg-body {
+    word-break: break-word;
+    line-height: 1.7;
+    font-size: 13px;
+  }
+  .msg-text { color: var(--text); }
+  .msg-text .md-p { margin: 0 0 10px; }
+  .msg-text .md-p:last-child { margin-bottom: 0; }
+  .msg-text .md-h {
+    font-family: var(--font-ui);
+    font-weight: 600;
+    margin: 16px 0 8px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .msg-text .md-h:first-child { margin-top: 0; }
+  .msg-text .md-h1 { font-size: 19px; }
+  .msg-text .md-h2 { font-size: 17px; }
+  .msg-text .md-h3 { font-size: 15px; }
+  .msg-text .md-h4,
+  .msg-text .md-h5,
+  .msg-text .md-h6 { font-size: 13px; color: var(--text-dim); }
+  .msg-text .md-inline {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--elevated);
+    border: 1px solid var(--line);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--clay);
+  }
+  .msg-text pre.md-code {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 12px 14px;
+    margin: 10px 0;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .msg-text pre.md-code code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+  .msg-text ul.md-list,
+  .msg-text ol.md-list {
+    margin: 8px 0;
+    padding-left: 22px;
+  }
+  .msg-text ul.md-list { list-style: none; padding-left: 14px; }
+  .msg-text ul.md-list li {
+    position: relative;
+    padding-left: 14px;
+    margin: 3px 0;
+    line-height: 1.65;
+  }
+  .msg-text ul.md-list li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 10px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--sage-bright);
+  }
+  .msg-text ol.md-list li { margin: 3px 0; line-height: 1.65; }
+  .msg-text ol.md-list { padding-left: 24px; }
+  .msg-text blockquote.md-quote {
+    border-left: 2px solid var(--line-2);
+    padding: 4px 0 4px 14px;
+    margin: 10px 0;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+  .msg-text hr.md-hr {
+    border: none;
+    border-top: 1px solid var(--line);
+    margin: 14px 0;
+  }
+  .msg-text strong { font-weight: 600; color: var(--text); }
+  .msg-text em { font-style: italic; }
+  .msg-text a {
+    color: var(--sage-deep);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: rgba(90, 125, 82, 0.4);
+    transition: color 0.15s ease, text-decoration-color 0.15s ease;
+  }
+  .msg-text a:hover {
+    color: var(--sage-bright);
+    text-decoration-color: var(--sage-bright);
+  }
+  .msg-thinking {
+    color: var(--text-dim);
+    font-style: italic;
+    font-family: var(--font-display);
+    font-size: 16px;
+    border-left: 2px solid var(--line-2);
+    padding: 6px 0 6px 16px;
+    margin: 10px 0;
+    line-height: 1.55;
+  }
+
+  .tool-call {
+    background: var(--sky-dim);
+    border: 1px solid rgba(107, 149, 184, 0.22);
+    border-left: 3px solid var(--sky);
+    padding: 0;
+    border-radius: 4px;
+    margin: 10px 0;
+    overflow: hidden;
+  }
+  .tool-call .tool-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(107, 149, 184, 0.06);
+    border-bottom: 1px solid rgba(107, 149, 184, 0.15);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+  .tool-call .name {
+    color: var(--sky);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .tool-call .name::before {
+    content: "⚙ ";
+    color: var(--sage-bright);
+  }
+  .tool-call .tool-id,
+  .tool-result .tool-id {
+    color: var(--text-faint);
+    font-size: 10px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    opacity: 0.7;
+  }
+  .tool-call .tool-input { padding: 10px 12px; }
+
+  .tool-result {
+    background: var(--sage-dim);
+    border: 1px solid rgba(90, 125, 82, 0.18);
+    border-left: 3px solid var(--sage-bright);
+    padding: 0;
+    margin: 10px 0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .tool-result.err {
+    background: var(--clay-dim);
+    border-left-color: var(--clay);
+  }
+  .tool-result .tool-result-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(90, 125, 82, 0.06);
+    border-bottom: 1px solid rgba(90, 125, 82, 0.14);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+  }
+  .tool-result.err .tool-result-head {
+    background: rgba(201, 123, 94, 0.06);
+    border-bottom-color: rgba(201, 123, 94, 0.18);
+  }
+  .tool-result .tool-result-label {
+    color: var(--sage-deep);
+    font-weight: 600;
+  }
+  .tool-result.err .tool-result-label { color: var(--clay); }
+  .tool-result .tool-result-body {
+    padding: 10px 12px;
+    font-family: var(--font-ui);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  .tool-result .tool-result-body .msg-text { font-size: 12.5px; }
+
+  /* ============ COLLAPSIBLE CARDS (system / thinking) ============ */
+  details.msg.collapsible-card {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-left: none;
+    box-shadow: none;
+    margin-bottom: 14px;
+    animation: none;
+  }
+  details.msg.collapsible-card > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 16px;
+    background: var(--panel-2);
+    border: 1px dashed var(--honey);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  details.msg.collapsible-card > summary::-webkit-details-marker { display: none; }
+  details.msg.collapsible-card > summary::before {
+    content: "▸";
+    color: var(--honey);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    transition: transform 0.2s ease;
+    display: inline-block;
+  }
+  details.msg.collapsible-card[open] > summary::before { transform: rotate(90deg); }
+  details.msg.collapsible-card > summary:hover {
+    background: var(--hover);
+    border-color: var(--honey);
+  }
+  details.msg.collapsible-card > summary .msg-role {
+    color: var(--honey);
+    margin: 0;
+  }
+  details.msg.collapsible-card > summary .msg-role::before { display: none; }
+  details.msg.collapsible-card > summary .collapse-hint {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  details.msg.collapsible-card[open] > summary .collapse-hint { display: none; }
+  details.msg.collapsible-card > .msg-body {
+    padding: 16px 20px;
+    margin-top: 6px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--honey);
+    border-radius: 5px;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  details.thinking-block {
+    margin: 8px 0;
+  }
+  details.thinking-block > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    color: var(--text-faint);
+    background: var(--paper-2);
+    border: 1px dashed var(--line-2);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+  }
+  details.thinking-block > summary::-webkit-details-marker { display: none; }
+  details.thinking-block > summary::before {
+    content: "▸";
+    display: inline-block;
+    transition: transform 0.2s ease;
+  }
+  details.thinking-block[open] > summary::before { transform: rotate(90deg); }
+  details.thinking-block > summary:hover {
+    color: var(--text-dim);
+    border-color: var(--text-faint);
+  }
+  details.thinking-block > summary .msg-role {
+    margin: 0;
+    color: inherit;
+  }
+  details.thinking-block > summary .msg-role::before { display: none; }
+  details.thinking-block .msg-thinking {
+    margin: 8px 0 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* ============ TOOL-PAIR CARD (tool_use + tool_result) ============ */
+  .tool-pair {
+    margin: 8px 0 8px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--sky);
+    border-radius: 5px;
+    overflow: hidden;
+    font-size: 12px;
+    box-shadow: 0 1px 2px rgba(80, 70, 50, 0.03);
+    animation: msgIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  }
+  .tool-pair-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--sky-dim);
+    border-bottom: 1px solid rgba(107, 149, 184, 0.16);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+  .tool-pair-head .name {
+    color: var(--sky);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .tool-pair-head .name::before {
+    content: "⚙ ";
+    color: var(--sage-bright);
+  }
+  .tool-pair-head .tool-id {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-size: 10px;
+    opacity: 0.7;
+  }
+  .tool-pair-input {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line-faint);
+  }
+  .tool-pair-input pre.j-block.flat {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+  .tool-pair-result {
+    padding: 0;
+  }
+  .tool-pair-result.err { background: rgba(201, 123, 94, 0.04); }
+  .tool-pair-result-label {
+    padding: 8px 14px 2px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sage-deep);
+  }
+  .tool-pair-result.err .tool-pair-result-label { color: var(--clay); }
+  .tool-pair-result-body {
+    padding: 4px 14px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .tool-pair-result-body .msg-text { font-size: 12px; }
+  .tool-pair-result-body pre.j-block.flat,
+  .tool-pair-result-body pre.j-block {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* ============ COLLAPSE WRAP (long content progressive disclosure) ============ */
+  .collapse-wrap {
+    position: relative;
+    margin-top: 4px;
+  }
+  .collapse-wrap .collapse-body {
+    max-height: 260px;
+    overflow: hidden;
+    position: relative;
+  }
+  .collapse-wrap .collapse-body::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 56px;
+    background: linear-gradient(180deg, transparent, var(--panel) 88%);
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .collapse-wrap.open .collapse-body { max-height: none; }
+  .collapse-wrap.open .collapse-body::after { opacity: 0; }
+  .collapse-toggle {
+    display: block;
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-top: none;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .collapse-toggle:hover {
+    background: var(--sage-dim);
+    color: var(--sage-deep);
+  }
+  .collapse-toggle .show-less { display: none; }
+  .collapse-wrap.open .collapse-toggle .show-more { display: none; }
+  .collapse-wrap.open .collapse-toggle .show-less { display: inline; }
+
+  /* JSON blocks */
+  .j-block-wrap {
+    margin: 6px 0;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--paper);
+    border: 1px solid var(--line);
+  }
+  pre.j-block {
+    margin: 0;
+    padding: 12px 14px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+    overflow-x: auto;
+  }
+  code.j-inline {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--elevated);
+    border: 1px solid var(--line);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--text);
+  }
+  .j-key { color: var(--sage-deep); }
+  .j-str { color: var(--clay); }
+  .j-num { color: var(--honey); }
+  .j-bool { color: var(--sky); font-weight: 500; }
+  .j-null { color: var(--text-faint); font-style: italic; }
+  .j-brace { color: var(--text-dim); }
+  .j-punct { color: var(--text-faint); }
+
+  .seg-image {
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--paper-2);
+    border: 1px dashed var(--line-2);
+    border-radius: 4px;
+  }
+  .seg-tag {
+    color: var(--plum);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+  }
+
+  /* ============ SSE TIMELINE ============ */
+  .sse-list {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--panel);
+    box-shadow: 0 1px 3px rgba(80, 70, 50, 0.04);
+  }
+  .sse-item {
+    display: grid;
+    grid-template-columns: 60px 180px 1fr;
+    gap: 16px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line-faint);
+    transition: background 0.15s ease;
+  }
+  .sse-item:last-child { border-bottom: none; }
+  .sse-item:hover { background: var(--panel-2); }
+  .sse-idx {
+    color: var(--text-faint);
+    text-align: right;
+    font-size: 10.5px;
+    padding-top: 1px;
+  }
+  .sse-event {
+    color: var(--sage);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+  .sse-event.delta { color: var(--text-dim); font-weight: 400; }
+  .sse-event.tool_use { color: var(--plum); }
+  .sse-event.error { color: var(--clay); }
+  .sse-event.message_start, .sse-event.message_stop { color: var(--sage-bright); }
+  .sse-data {
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.55;
+  }
+
+  /* ============ RAW JSON ============ */
+  pre.json {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.65;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 18px 22px;
+    color: var(--text);
+    margin: 0;
+    box-shadow: 0 1px 3px rgba(80, 70, 50, 0.04);
+  }
+
+  details summary {
+    color: var(--sage-deep);
+    cursor: pointer;
+    padding: 8px 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    transition: color 0.2s ease;
+    list-style: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: "▸ ";
+    color: var(--text-faint);
+    display: inline-block;
+    transition: transform 0.25s ease;
+  }
+  details[open] summary::before {
+    transform: rotate(90deg);
+  }
+  details summary:hover { color: var(--sage-bright); }
+
+  /* ============ SCROLLBARS ============ */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-2);
+    border-radius: 5px;
+    border: 3px solid var(--paper);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+  /* Selection */
+  ::selection {
+    background: rgba(90, 125, 82, 0.18);
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="eyebrow"><span class="dot"></span>Capture Inspector</div>
+      <h1>Claude Code<br><em>traffic archive</em></h1>
+      <div class="sub" id="count">— scanning —</div>
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <span id="currentFile">no capture selected</span>
+      <span style="flex:1"></span>
+      <button onclick="reloadFiles()">↻ REFRESH</button>
+    </div>
+    <div class="tabs" id="tabs" style="display:none">
+      <div class="tab active" data-tab="conv">Conversation</div>
+      <div class="tab" data-tab="sse">SSE Timeline</div>
+      <div class="tab" data-tab="req">Request</div>
+      <div class="tab" data-tab="res">Response</div>
+      <div class="tab" data-tab="raw">Raw JSON</div>
+    </div>
+    <div class="content" id="content">
+      <div class="empty">
+        <div class="big">Awaiting inspection</div>
+        <div class="small"><span class="arrow">←</span>SELECT A CAPTURE FROM THE ARCHIVE</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+let currentData = null;
+let currentTab = "conv";
+let lastFileSig = null;
+let isFirstLoad = true;
+
+function fileItemHTML(it, animate) {
+  const style = animate ? "" : 'style="animation:none"';
+  return `<div class="file-item" data-name="${it.name}" onclick="selectFile('${it.name}')" ${style}>
+      <div class="preview">${escapeHtml(it.preview)}</div>
+      <div class="meta">
+        <span class="badge ${it.status === 200 ? 'ok' : (it.status ? 'err' : 'neutral')}">${it.status || "—"}</span>
+        <span>${formatTime(it.mtime)}</span>
+        <span>${(it.size/1024).toFixed(1)}k</span>
+      </div>
+    </div>`;
+}
+
+async function reloadFiles() {
+  let items;
+  try {
+    const res = await fetch("/api/files");
+    items = await res.json();
+  } catch (e) {
+    return; // network hiccup — silently skip this tick
+  }
+
+  // Signature covers everything visible (name, status, size, time, preview).
+  const sig = items.map(it => `${it.name}|${it.status}|${it.size}|it.mtime}|${it.preview}`).join("\n");
+
+  document.getElementById("count").textContent = `${items.length} capture${items.length===1?"":"s"} on record`;
+
+  // No visible change → don't touch the DOM at all.
+  if (sig === lastFileSig) return;
+  lastFileSig = sig;
+
+  const list = document.getElementById("fileList");
+  const existing = new Map();
+  list.querySelectorAll(".file-item").forEach(el => existing.set(el.dataset.name, el));
+
+  // Build new DOM incrementally, reusing existing nodes when unchanged.
+  const frag = document.createDocumentFragment();
+  const seen = new Set();
+  for (const it of items) {
+    seen.add(it.name);
+    let el = existing.get(it.name);
+    if (el) {
+      // Update meta/preview in place without destroying the node.
+      const preview = el.querySelector(".preview");
+      const meta = el.querySelector(".meta");
+      const badgeClass = it.status === 200 ? "ok" : it.status ? "err" : "neutral";
+      if (preview) preview.textContent = it.preview || "";
+      if (meta) {
+        meta.innerHTML = `<span class="badge ${badgeClass}">${it.status || "—"}</span><span>${formatTime(it.mtime)}</span><span>${(it.size/1024).toFixed(1)}k</span>`;
+      }
+    } else {
+      // New item — animate only on first load, otherwise just appear.
+      const tmp = document.createElement("div");
+      tmp.innerHTML = fileItemHTML(it, isFirstLoad);
+      el = tmp.firstElementChild;
+    }
+    frag.appendChild(el);
+  }
+
+  // Remove items no longer present.
+  existing.forEach((el, name) => {
+    if (!seen.has(name)) el.remove();
+  });
+
+  list.appendChild(frag);
+  isFirstLoad = false;
+}
+
+async function selectFile(name) {
+  document.querySelectorAll(".file-item").forEach(el => el.classList.toggle("active", el.dataset.name === name));
+  document.getElementById("currentFile").textContent = name;
+  document.getElementById("tabs").style.display = "flex";
+
+  const res = await fetch("/api/file?name=" + encodeURIComponent(name));
+  currentData = await res.json();
+  render();
+}
+
+function render() {
+  if (!currentData) return;
+  const tab = currentTab;
+  const c = document.getElementById("content");
+  c.style.animation = "none";
+  void c.offsetWidth;
+  c.style.animation = "";
+  if (tab === "conv") c.innerHTML = renderConversation(currentData);
+  else if (tab === "sse") c.innerHTML = renderSSE(currentData);
+  else if (tab === "req") c.innerHTML = renderRequest(currentData);
+  else if (tab === "res") c.innerHTML = renderResponse(currentData);
+  else c.innerHTML = `<pre class="json">${escapeHtml(JSON.stringify(currentData, null, 2))}</pre>`;
+}
+
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const t = e.target.closest(".tab");
+  if (!t) return;
+  document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+  t.classList.add("active");
+  currentTab = t.dataset.tab;
+  render();
+});
+
+function renderConversation(data) {
+  const req = data.request?.body || {};
+  const messages = req.messages || [];
+  const sse = data.response?.sse_events || [];
+
+  const rebuiltAssistant = rebuildAssistantFromSSE(sse);
+
+  // Build the chronological thread: system → request messages → SSE reply.
+  const all = [];
+  if (req.system) {
+    const sys = typeof req.system === "string" ? req.system : JSON.stringify(req.system, null, 2);
+    all.push({ role: "system", content: sys });
+  }
+  for (const m of messages) all.push(m);
+  if (rebuiltAssistant) all.push({ role: "assistant", content: rebuiltAssistant, fromSSE: true });
+
+  const items = buildConversationItems(all);
+
+  let html = `<div class="meta-table">
+    <div class="kv"><div class="k">Model</div><div>${escapeHtml(req.model || "—")}</div></div>
+    <div class="kv"><div class="k">Temp / MaxTokens</div><div>temp=${req.temperature ?? "—"} · max=${req.max_tokens ?? "—"}</div></div>
+    <div class="kv"><div class="k">Tools</div><div>${req.tools?.length || 0} declared</div></div>
+    <div class="kv"><div class="k">Stream</div><div>${req.stream ?? "—"}</div></div>
+    <div class="kv"><div class="k">Response</div><div><span class="badge ${data.response?.status_code === 200 ? 'ok' : 'err'}">${data.response?.status_code ?? "—"}</span></div></div>
+  </div>`;
+
+  const toolPairCount = items.filter(i => i.kind === "tool-pair").length;
+  const textTurnCount = items.filter(i => i.kind !== "tool-pair" && i.kind !== "system").length;
+  html += `<h3 class="section">Conversation · ${textTurnCount} turns${toolPairCount ? ` · ${toolPairCount} tool calls` : ""}</h3>`;
+
+  items.forEach((it) => { html += renderItem(it); });
+
+  return html;
+}
+
+// Walk the message list and emit render-items. tool_use blocks are paired
+// with their matching tool_result (by tool_use_id) so they render as one card;
+// pure-tool-result user messages are absorbed and not rendered standalone.
+function buildConversationItems(messages) {
+  const resultsById = new Map();
+  for (const m of messages) {
+    if (Array.isArray(m?.content)) {
+      for (const b of m.content) {
+        if (b && b.type === "tool_result" && b.tool_use_id) {
+          resultsById.set(b.tool_use_id, b);
+        }
+      }
+    }
+  }
+
+  const items = [];
+  let turnIdx = 0;
+  const bump = () => { turnIdx += 1; return turnIdx; };
+
+  for (const m of messages) {
+    if (m.role === "system") {
+      items.push({ kind: "system", message: m });
+      continue;
+    }
+    if (m.role === "user") {
+      // Skip pure tool_result payloads — they are paired with their tool_use.
+      const c = m.content;
+      if (Array.isArray(c) && c.length && c.every(b => b && b.type === "tool_result")) continue;
+      items.push({ kind: "user", message: m, idx: bump() });
+      continue;
+    }
+    if (m.role === "assistant") {
+      const c = Array.isArray(m.content) ? m.content : null;
+      if (!c || !c.length) {
+        items.push({ kind: "assistant", message: m, blocks: [], idx: bump() });
+        continue;
+      }
+      // Split assistant content into prose-groups interleaved with tool_use calls.
+      let buf = [];
+      const flush = () => {
+        if (buf.length) {
+          items.push({ kind: "assistant", message: m, blocks: buf, idx: bump() });
+          buf = [];
+        }
+      };
+      for (const b of c) {
+        if (b && b.type === "tool_use") {
+          flush();
+          const result = b.id ? resultsById.get(b.id) : null;
+          items.push({ kind: "tool-pair", toolUse: b, toolResult: result });
+        } else {
+          buf.push(b);
+        }
+      }
+      flush();
+      continue;
+    }
+    items.push({ kind: "other", message: m, idx: bump() });
+  }
+  return items;
+}
+
+function renderItem(it) {
+  switch (it.kind) {
+    case "system":     return renderSystemItem(it.message);
+    case "user":       return renderUserItem(it.message, it.idx);
+    case "assistant":  return renderAssistantItem(it.message, it.blocks, it.idx);
+    case "tool-pair":  return renderToolPairItem(it.toolUse, it.toolResult);
+    default:           return renderMessage(it.message, it.idx);
+  }
+}
+
+function renderSystemItem(m) {
+  const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content, null, 2);
+  const words = (text.match(/\S+/g) || []).length;
+  const body = typeof m.content === "string"
+    ? smartRender(m.content)
+    : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(text)}</pre></div>`;
+  return `<details class="msg system collapsible-card">
+    <summary>
+      <span class="msg-role">system · ${words} words</span>
+      <span class="collapse-hint">collapsed — click to read</span>
+    </summary>
+    <div class="msg-body">${body}</div>
+  </details>`;
+}
+
+function renderUserItem(m, idx) {
+  let body = "";
+  if (typeof m.content === "string") {
+    body = `<div class="msg-text">${smartRender(m.content)}</div>`;
+  } else if (Array.isArray(m.content)) {
+    for (const b of m.content) {
+      if (b && b.type === "tool_result") continue; // paired elsewhere
+      body += renderBlock(b, "user");
+    }
+  } else {
+    body = `<pre class="json">${escapeHtml(JSON.stringify(m.content, null, 2))}</pre>`;
+  }
+  return `<div class="msg user">
+    <span class="turn-num">${String(idx).padStart(2, "0")}</span>
+    <div class="msg-role">user</div>
+    <div class="msg-body">${body}</div>
+  </div>`;
+}
+
+function renderAssistantItem(m, blocks, idx) {
+  let body = "";
+  for (const b of blocks) {
+    if (b.type === "thinking") {
+      body += renderThinkingBlock(b);
+    } else if (b.type === "text") {
+      body += `<div class="msg-text">${smartRender(b.text || "")}</div>`;
+    } else {
+      body += renderBlock(b, "assistant");
+    }
+  }
+  if (!body) body = `<div class="msg-text" style="color:var(--text-faint);font-style:italic">— no textual content —</div>`;
+  const tag = m.fromSSE ? "assistant · from SSE" : "assistant";
+  return `<div class="msg assistant">
+    <span class="turn-num">${String(idx).padStart(2, "0")}</span>
+    <div class="msg-role">${escapeHtml(tag)}</div>
+    <div class="msg-body">${body}</div>
+  </div>`;
+}
+
+function renderThinkingBlock(b) {
+  const text = b.thinking || "";
+  const words = (text.match(/\S+/g) || []).length;
+  if (!words) return "";
+  return `<details class="thinking-block">
+    <summary><span class="msg-role">thinking · ${words} words</span></summary>
+    <div class="msg-thinking">${escapeHtml(text)}</div>
+  </details>`;
+}
+
+// Single visual card pairing a tool_use with its matching tool_result.
+function renderToolPairItem(toolUse, toolResult) {
+  const input = toolUse.input ?? {};
+  const inputJson = JSON.stringify(input, null, 2);
+  const isCompact = !inputJson.includes("\n") && inputJson.length <= 80;
+  const inputInner = isCompact
+    ? `<code class="j-inline">${highlightJSON(inputJson)}</code>`
+    : `<pre class="j-block flat">${highlightJSON(inputJson)}</pre>`;
+
+  let resultSection = "";
+  if (toolResult) {
+    const isErr = !!toolResult.is_error;
+    const resultBody = renderToolResultContent(toolResult);
+    resultSection = `<div class="tool-pair-result ${isErr ? "err" : ""}">
+      <div class="tool-pair-result-label">${isErr ? "error result" : "result"}</div>
+      <div class="tool-pair-result-body">${resultBody}</div>
+    </div>`;
+  }
+
+  return `<div class="tool-pair">
+    <div class="tool-pair-head">
+      <span class="name">${escapeHtml(toolUse.name || "")}</span>
+      <span class="tool-id">${escapeHtml(toolUse.id || "")}</span>
+    </div>
+    <div class="tool-pair-input">${inputInner}</div>
+    ${resultSection}
+  </div>`;
+}
+
+function renderToolResultContent(toolResult) {
+  let body = "";
+  const c = toolResult.content;
+  if (typeof c === "string") {
+    body = smartRender(c);
+  } else if (Array.isArray(c)) {
+    body = c.map(seg => {
+      if (seg && seg.type === "text") return smartRender(seg.text || "");
+      if (seg && seg.type === "image") {
+        return `<div class="seg-image"><span class="seg-tag">image · ${escapeHtml(seg.source?.type || "")}</span></div>`;
+      }
+      return `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(JSON.stringify(seg, null, 2))}</pre></div>`;
+    }).join("");
+  } else if (c && typeof c === "object") {
+    body = `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(JSON.stringify(c, null, 2))}</pre></div>`;
+  } else {
+    body = `<div class="msg-text">${escapeHtml(String(c ?? ""))}</div>`;
+  }
+
+  // Long content → wrap with collapse toggle.
+  const lineGuess = (body.match(/\n/g) || []).length;
+  const shouldCollapse = body.length > 1000 || lineGuess > 12;
+  if (shouldCollapse) {
+    return `<div class="collapse-wrap">
+      <div class="collapse-body">${body}</div>
+      <button class="collapse-toggle" onclick="this.closest('.collapse-wrap').classList.toggle('open')">
+        <span class="show-more">▼ expand</span>
+        <span class="show-less">▲ collapse</span>
+      </button>
+    </div>`;
+  }
+  return body;
+}
+
+// Legacy renderer — kept for fallback / orphan blocks.
+function renderMessage(m, idx) {
+  const role = m.role;
+  const cls = role === "user" ? "user" : role === "assistant" ? "assistant" : role === "system" ? "system" : "tool";
+  let body = "";
+  if (typeof m.content === "string") {
+    body = `<div class="msg-text">${smartRender(m.content)}</div>`;
+  } else if (Array.isArray(m.content)) {
+    for (const block of m.content) {
+      body += renderBlock(block, role);
+    }
+  } else {
+    body = `<pre class="json">${escapeHtml(JSON.stringify(m.content, null, 2))}</pre>`;
+  }
+  const tag = m.fromSSE ? `${role} · from SSE` : role;
+  const num = idx ? `<span class="turn-num">${String(idx).padStart(2, "0")}</span>` : "";
+  return `<div class="msg ${cls}">${num}<div class="msg-role">${escapeHtml(tag)}</div><div class="msg-body">${body}</div></div>`;
+}
+
+function renderBlock(b, role) {
+  if (b.type === "text") {
+    return `<div class="msg-text">${smartRender(b.text || "")}</div>`;
+  }
+  if (b.type === "thinking") {
+    return `<div class="msg-thinking">${escapeHtml(b.thinking || "")}</div>`;
+  }
+  if (b.type === "tool_use") {
+    const input = b.input ?? {};
+    const inputJson = JSON.stringify(input, null, 2);
+    const isCompact = !inputJson.includes("\n") && inputJson.length <= 80;
+    const inputHtml = isCompact
+      ? `<code class="j-inline">${highlightJSON(inputJson)}</code>`
+      : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(inputJson)}</pre></div>`;
+    return `<div class="tool-call">
+      <div class="tool-head">
+        <span class="name">${escapeHtml(b.name || "")}</span>
+        <span class="tool-id">${escapeHtml(b.id || "")}</span>
+      </div>
+      <div class="tool-input">${inputHtml}</div>
+    </div>`;
+  }
+  if (b.type === "tool_result") {
+    const isErr = b.is_error;
+    let body = "";
+    const c = b.content;
+    if (typeof c === "string") {
+      body = smartRender(c);
+    } else if (Array.isArray(c)) {
+      // tool_result content: array of {type: 'text', text} | {type: 'image', ...} | {type: 'tool_use', ...}
+      body = c.map(seg => {
+        if (seg && seg.type === "text") return smartRender(seg.text || "");
+        if (seg && seg.type === "tool_use") {
+          const j = JSON.stringify(seg, null, 2);
+          return `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(j)}</pre></div>`;
+        }
+        if (seg && seg.type === "image") {
+          return `<div class="seg-image"><span class="seg-tag">image · ${escapeHtml(seg.source?.type || "")}</span></div>`;
+        }
+        return `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(JSON.stringify(seg, null, 2))}</pre></div>`;
+      }).join("");
+    } else if (c && typeof c === "object") {
+      body = `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(JSON.stringify(c, null, 2))}</pre></div>`;
+    } else {
+      body = `<div class="msg-text">${escapeHtml(String(c ?? ""))}</div>`;
+    }
+    return `<div class="tool-result ${isErr ? 'err' : ''}">
+      <div class="tool-result-head">
+        <span class="tool-result-label">${isErr ? "error" : "result"}</span>
+        <span class="tool-id">${escapeHtml(b.tool_use_id || "")}</span>
+      </div>
+      <div class="tool-result-body">${body}</div>
+    </div>`;
+  }
+  return `<pre class="json">${escapeHtml(JSON.stringify(b, null, 2))}</pre>`;
+}
+
+// Smart per-content renderer: detect JSON, otherwise fall back to markdown.
+function smartRender(s) {
+  if (s == null) return "";
+  const str = String(s);
+  const trimmed = str.trim();
+  if (!trimmed) return "";
+  // Whole-blob JSON
+  if (/^[{[]/.test(trimmed) && looksLikeJSON(trimmed)) {
+    return `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(JSON.stringify(JSON.parse(trimmed), null, 2))}</pre></div>`;
+  }
+  // Prose (possibly with embedded ```json``` blocks handled in markdown)
+  return renderMarkdown(str);
+}
+
+function looksLikeJSON(s) {
+  try { JSON.parse(s); return true; } catch { return false; }
+}
+
+function unescapeHtml(s) {
+  return String(s).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+
+// Tokenizer-based JSON syntax highlighter. Input is raw JSON string.
+function highlightJSON(jsonStr) {
+  const json = typeof jsonStr === "string" ? jsonStr : JSON.stringify(jsonStr, null, 2);
+  let out = "";
+  let i = 0;
+  const n = json.length;
+  const isKey = (idx) => {
+    // peek ahead from idx (which is just after a closing quote) for `:`
+    let k = idx;
+    while (k < n && (json[k] === " " || json[k] === "\t")) k++;
+    return json[k] === ":";
+  };
+  while (i < n) {
+    const ch = json[i];
+    if (ch === '"') {
+      // scan to closing quote, respecting backslash escapes
+      let end = i + 1;
+      while (end < n) {
+        if (json[end] === "\\") { end += 2; continue; }
+        if (json[end] === '"') break;
+        end++;
+      }
+      const lit = json.slice(i, end + 1);
+      const key = isKey(end + 1);
+      out += `<span class="${key ? "j-key" : "j-str"}">${escapeHtml(lit)}</span>`;
+      i = end + 1;
+      continue;
+    }
+    if (ch === "-" || (ch >= "0" && ch <= "9")) {
+      let end = i;
+      while (end < n && /[-+0-9.eE]/.test(json[end])) end++;
+      out += `<span class="j-num">${escapeHtml(json.slice(i, end))}</span>`;
+      i = end;
+      continue;
+    }
+    if (json.startsWith("true", i)) { out += '<span class="j-bool">true</span>'; i += 4; continue; }
+    if (json.startsWith("false", i)) { out += '<span class="j-bool">false</span>'; i += 5; continue; }
+    if (json.startsWith("null", i)) { out += '<span class="j-null">null</span>'; i += 4; continue; }
+    if (ch === "{" || ch === "}" || ch === "[" || ch === "]") {
+      out += `<span class="j-brace">${escapeHtml(ch)}</span>`;
+      i++;
+      continue;
+    }
+    if (ch === "," || ch === ":") {
+      out += `<span class="j-punct">${escapeHtml(ch)}</span>`;
+      i++;
+      continue;
+    }
+    out += escapeHtml(ch);
+    i++;
+  }
+  return out;
+}
+
+function rebuildAssistantFromSSE(events) {
+  if (!events?.length) return null;
+  const blocks = new Map();
+  let order = [];
+  for (const ev of events) {
+    const d = ev.data;
+    if (!d || typeof d === "string") continue;
+    if (ev.event === "content_block_start" && typeof d.index === "number") {
+      if (!blocks.has(d.index)) {
+        blocks.set(d.index, { ...(d.content_block || {}) });
+        order.push(d.index);
+      }
+    }
+    if (ev.event === "content_block_delta" && typeof d.index === "number") {
+      const blk = blocks.get(d.index);
+      if (!blk) continue;
+      const delta = d.delta || {};
+      if (delta.type === "text_delta" && typeof delta.text === "string") {
+        blk.text = (blk.text || "") + delta.text;
+      } else if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
+        blk.thinking = (blk.thinking || "") + delta.thinking;
+      } else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string") {
+        blk._raw_input = (blk._raw_input || "") + delta.partial_json;
+      }
+    }
+  }
+  if (!order.length) return null;
+  return order.map(i => {
+    const blk = blocks.get(i);
+    if (blk.type === "tool_use" && blk._raw_input) {
+      try { blk.input = JSON.parse(blk._raw_input); } catch {}
+      delete blk._raw_input;
+    }
+    return blk;
+  });
+}
+
+function renderSSE(data) {
+  const events = data.response?.sse_events || [];
+  if (!events.length) {
+    return `<div class="empty">
+      <div class="big">No stream captured</div>
+      <div class="small">RESPONSE WAS NOT SSE · SEE BODY BELOW</div>
+    </div>
+    <h3 class="section">Response body</h3>
+    <pre class="json">${escapeHtml(JSON.stringify(data.response?.body ?? data.response ?? {}, null, 2))}</pre>`;
+  }
+  let html = `<div style="margin-bottom:14px;color:var(--text-dim);font-family:var(--font-mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase">${events.length} events · <span style="color:var(--sage-deep)">streaming timeline</span></div>`;
+  html += `<div class="sse-list">`;
+  events.forEach((ev, i) => {
+    const name = ev.event || "—";
+    const cls = name.includes("delta") ? "delta" : name.includes("tool") ? "tool_use" : name.includes("error") ? "error" : "";
+    const dataStr = typeof ev.data === "string" ? ev.data : JSON.stringify(ev.data);
+    const preview = dataStr.length > 500 ? dataStr.slice(0, 500) + ` … (+${dataStr.length-500})` : dataStr;
+    html += `<div class="sse-item">
+      <div class="sse-idx">#${String(i).padStart(3, "0")}</div>
+      <div class="sse-event ${cls}">${escapeHtml(name)}</div>
+      <div class="sse-data">${escapeHtml(preview)}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  return html;
+}
+
+function renderRequest(data) {
+  const req = data.request || {};
+  const tools = req.body?.tools || [];
+  let html = `<div class="meta-table">
+    <div class="kv"><div class="k">URL</div><div>${escapeHtml(req.url)}</div></div>
+    <div class="kv"><div class="k">Method</div><div>${escapeHtml(req.method)}</div></div>
+  </div>`;
+
+  html += `<h3 class="section">Headers</h3>`;
+  html += `<pre class="json">${escapeHtml(JSON.stringify(redactHeaders(req.headers), null, 2))}</pre>`;
+
+  if (tools.length) {
+    html += `<h3 class="section">Tools · ${tools.length} declared</h3>`;
+    for (const t of tools) {
+      const name = t.name || t.function?.name || "(unnamed)";
+      html += `<details><summary>${escapeHtml(name)}</summary><pre class="json" style="margin-top:8px">${escapeHtml(JSON.stringify(t, null, 2))}</pre></details>`;
+    }
+  }
+
+  html += `<h3 class="section">Request body</h3>`;
+  html += `<pre class="json">${escapeHtml(JSON.stringify(req.body, null, 2))}</pre>`;
+  return html;
+}
+
+function renderResponse(data) {
+  const res = data.response || {};
+  const sse = res.sse_events || [];
+  const hasBody = res.body !== undefined && res.body !== null;
+  const status = res.status_code ?? res.status;
+  const badgeCls = status === 200 ? "ok" : (status && status >= 400) ? "err" : "neutral";
+
+  let html = `<div class="meta-table">
+    <div class="kv"><div class="k">Status</div><div><span class="badge ${badgeCls}">${status ?? "—"}</span></div></div>
+    <div class="kv"><div class="k">SSE Events</div><div>${sse.length}</div></div>
+    <div class="kv"><div class="k">Has Body</div><div>${hasBody ? "yes" : "no"}</div></div>
+    <div class="kv"><div class="k">Content-Type</div><div>${escapeHtml(res.headers?.["content-type"] || res.headers?.["Content-Type"] || "—")}</div></div>
+  </div>`;
+
+  // Headers
+  if (res.headers && Object.keys(res.headers).length) {
+    html += `<h3 class="section">Response headers</h3>`;
+    html += `<pre class="json">${escapeHtml(JSON.stringify(redactHeaders(res.headers), null, 2))}</pre>`;
+  }
+
+  // Reassembled SSE → final assistant message JSON
+  if (sse.length) {
+    const rebuilt = rebuildAssistantFromSSE(sse);
+    if (rebuilt) {
+      html += `<h3 class="section">Reassembled content blocks</h3>`;
+      html += `<div style="margin-bottom:10px;color:var(--text-dim);font-family:var(--font-mono);font-size:11px;letter-spacing:0.04em">${rebuilt.length} block${rebuilt.length===1?"":"s"} reconstructed from ${sse.length} SSE events</div>`;
+      html += `<pre class="json j-block">${highlightJSON(JSON.stringify(rebuilt, null, 2))}</pre>`;
+    }
+  }
+
+  // Raw response body (when not SSE / when body is captured directly)
+  if (hasBody) {
+    html += `<h3 class="section">Response body</h3>`;
+    let bodyStr;
+    try {
+      bodyStr = typeof res.body === "string" ? res.body : JSON.stringify(res.body, null, 2);
+    } catch {
+      bodyStr = String(res.body);
+    }
+    const trimmed = bodyStr.trim();
+    const isJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+    if (isJson) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        html += `<pre class="json j-block">${highlightJSON(JSON.stringify(parsed, null, 2))}</pre>`;
+      } catch {
+        html += `<pre class="json">${escapeHtml(bodyStr)}</pre>`;
+      }
+    } else {
+      html += `<pre class="json">${escapeHtml(bodyStr)}</pre>`;
+    }
+  }
+
+  if (!sse.length && !hasBody) {
+    html += `<div class="empty" style="padding:60px 20px">
+      <div class="big" style="font-size:28px">No response captured</div>
+      <div class="small">NEITHER SSE EVENTS NOR A RESPONSE BODY WAS RECORDED</div>
+    </div>`;
+  }
+
+  return html;
+}
+
+function redactHeaders(h) {
+  const out = { ...(h || {}) };
+  for (const k of Object.keys(out)) {
+    if (/auth|x-api-key|authorization|token/i.test(k)) out[k] = out[k].slice(0, 8) + "…";
+  }
+  return out;
+}
+
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[ch]));
+}
+
+// Minimal, dependency-free markdown renderer.
+// Input is HTML-escaped first; safe wrappers added afterwards.
+function renderMarkdown(src) {
+  if (!src) return "";
+  const escaped = escapeHtml(src);
+  const stash = [];
+  const keep = (html) => { stash.push(html); return `\u0000${stash.length - 1}\u0000`; };
+
+  let text = escaped;
+  // Fenced code blocks
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const cleanCode = code.replace(/\n$/, "");
+    const lowLang = (lang || "").toLowerCase();
+    if (lowLang === "json") {
+      // highlightJSON expects raw JSON; the escaped text needs un-escaping first.
+      const raw = unescapeHtml(cleanCode);
+      return keep(`<pre class="md-code j-block" data-lang="json"><code>${highlightJSON(raw)}</code></pre>`);
+    }
+    return keep(`<pre class="md-code" data-lang="${lang}"><code>${cleanCode}</code></pre>`);
+  });
+  // Inline code
+  text = text.replace(/`([^`\n]+)`/g, (_, code) =>
+    keep(`<code class="md-inline">${code}</code>`));
+
+  const lines = text.split("\n");
+  const out = [];
+  let para = [];
+  let list = null;
+
+  const flushPara = () => {
+    if (para.length) { out.push(`<p class="md-p">${para.join("<br>")}</p>`); para = []; }
+  };
+  const flushList = () => {
+    if (list) {
+      out.push(`<${list.type} class="md-list">${list.items.map(i => `<li>${inlineFmt(i)}</li>`).join("")}</${list.type}>`);
+      list = null;
+    }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+
+    const m = line.match(/^\u0000(\d+)\u0000$/);
+    if (m) { flushPara(); flushList(); out.push(stash[+m[1]]); continue; }
+
+    if (line === "") { flushPara(); flushList(); continue; }
+
+    // Heading
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      flushPara(); flushList();
+      const lvl = h[1].length;
+      out.push(`<h${lvl} class="md-h md-h${lvl}">${inlineFmt(h[2])}</h${lvl}>`);
+      continue;
+    }
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      flushPara(); flushList();
+      out.push(`<hr class="md-hr">`);
+      continue;
+    }
+    // Blockquote (after escape, '>' is '&gt;')
+    if (/^&gt;\s?/.test(line)) {
+      flushPara(); flushList();
+      out.push(`<blockquote class="md-quote">${inlineFmt(line.replace(/^&gt;\s?/, ""))}</blockquote>`);
+      continue;
+    }
+    // Unordered list
+    const ul = line.match(/^[-*+]\s+(.*)$/);
+    if (ul) {
+      flushPara();
+      if (!list || list.type !== "ul") { flushList(); list = { type: "ul", items: [] }; }
+      list.items.push(ul[1]);
+      continue;
+    }
+    // Ordered list
+    const ol = line.match(/^\d+[.)]\s+(.*)$/);
+    if (ol) {
+      flushPara();
+      if (!list || list.type !== "ol") { flushList(); list = { type: "ol", items: [] }; }
+      list.items.push(ol[1]);
+      continue;
+    }
+    // Regular text line
+    flushList();
+    // Inline-stashed code inside a paragraph line
+    para.push(inlineFmt(line));
+  }
+  flushPara();
+  flushList();
+
+  return out.join("\n").replace(/\u0000(\d+)\u0000/g, (_, i) => stash[+i]);
+}
+
+function inlineFmt(s) {
+  return s
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_\n]+)__/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>')
+    .replace(/\u0000(\d+)\u0000/g, (_, i) => `\u0000${i}\u0000`); // preserve inline-code stash
+}
+
+function formatTime(ms) {
+  if (!ms) return "—";
+  const d = new Date(ms);
+  return d.toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+reloadFiles();
+setInterval(reloadFiles, 3000);
+</script>
+</body>
+</html>
