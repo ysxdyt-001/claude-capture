@@ -38,6 +38,7 @@ Options:
   --port-viewer <n>     viewer HTTP port               (default 8090, auto-picks next free if busy)
   --captures <path>     captures output directory     (default ~/.claude-capture/captures)
   --no-browser          do not auto-open the viewer in browser
+  --no-mitmweb-browser  do not auto-open the mitmweb Web UI in browser
   -h, --help            show this help
 
 Anything after "--" is forwarded verbatim to claude.
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     portMitmwebExplicit: false,
     captures: path.join(os.homedir(), ".claude-capture", "captures"),
     openBrowser: true,
+    openMitmwebBrowser: true,
     claudeArgs: [],
   };
   let i = 0;
@@ -82,6 +84,8 @@ function parseArgs(argv) {
       opts.captures = path.resolve(argv[++i]);
     } else if (a === "--no-browser") {
       opts.openBrowser = false;
+    } else if (a === "--no-mitmweb-browser") {
+      opts.openMitmwebBrowser = false;
     } else if (a.startsWith("--port-proxy=")) {
       opts.portProxy = Number(a.slice("--port-proxy=".length));
       opts.portProxyExplicit = true;
@@ -342,17 +346,18 @@ async function main() {
       "-p", String(opts.portProxy),
       "--web-port", String(opts.portMitmweb),
       "-s", ADDON_PATH,
-      "--set", "web_open_browser=false",
+      "--set", `web_open_browser=${opts.openMitmwebBrowser ? "true" : "false"}`,
       "--set", "console_eventlog_verbosity=warn",
     ],
     {
       env: { ...process.env, CLAUDE_CAPTURE_DIR: opts.captures },
-      stdio: ["ignore", "pipe", "pipe"],
+      // mitmweb 的 stdout/stderr 直接丢弃 —— claude 用 stdio: "inherit" 接管终端，
+      // 让 mitm 的日志混进来会和 claude 的 TUI 互相撕裂。
+      // 启动失败仍会被下面的 probePort 兜住（5s 内没起来就 abort）。
+      stdio: ["ignore", "ignore", "ignore"],
       shell: IS_WIN,
     }
   );
-  mitm.stdout.on("data", (d) => process.stdout.write(`[mitm] ${d}`));
-  mitm.stderr.on("data", (d) => process.stderr.write(`[mitm] ${d}`));
 
   // 3) 等 mitmweb 起来
   const proxyReady = await probePort(opts.portProxy, "127.0.0.1", 5000);
