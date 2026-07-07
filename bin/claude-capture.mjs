@@ -360,7 +360,13 @@ async function main() {
       "--set", "console_eventlog_verbosity=warn",
     ],
     {
-      env: { ...process.env, CLAUDE_CAPTURE_DIR: opts.captures },
+      env: {
+        ...process.env,
+        CLAUDE_CAPTURE_DIR: opts.captures,
+        // 纵深防御：强制 mitmweb 子进程（含 addon.py）进入 UTF-8 模式，
+        // 即使将来出现新的写盘点也能在 Windows 非 UTF-8 区域下安全工作。
+        PYTHONUTF8: "1",
+      },
       // mitmweb 的 stdout/stderr 直接丢弃 —— claude 用 stdio: "inherit" 接管终端，
       // 让 mitm 的日志混进来会和 claude 的 TUI 互相撕裂。
       // 启动失败仍会被下面的 probePort 兜住（5s 内没起来就 abort）。
