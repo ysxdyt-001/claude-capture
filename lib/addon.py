@@ -114,7 +114,14 @@ def response(flow: http.HTTPFlow) -> None:
             record["response"]["body"] = _safe_json(resp_text)
 
         out_path = CAPTURES_DIR / filename
-        out_path.write_text(json.dumps(record, ensure_ascii=False, indent=2))
+        # 显式 UTF-8：Windows 非 UTF-8 区域（cp936/cp932/cp949 等）默认编码无法
+        # 表示 CJK / emoji / 制表符（Claude system prompt 与工具输出里常见），
+        # ensure_ascii=False 写出时会抛 UnicodeEncodeError；且 write_text 先 open
+        # 截断文件再 write，异常会导致磁盘上残留 0 字节文件。
+        out_path.write_text(
+            json.dumps(record, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
         print(f"[addon] wrote {filename}  ({status}, {len(resp_text)} bytes)", flush=True)
     except Exception as exc:

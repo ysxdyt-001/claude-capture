@@ -234,6 +234,7 @@ On Windows, the mitmproxy CA cert lives at `%USERPROFILE%\.mitmproxy\mitmproxy-c
 | Banner says `port X busy → using Y` | another process on a default port | no action needed — auto-picked. Or use the printed URL |
 | `port X (Y) is already in use — free it or pick a different --port-Y` | you passed `--port-*` explicitly and that port is taken | either free the port or remove the flag (let claude-capture auto-pick) |
 | `no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in env` (warning) | soft warning — claude may use a config file | safe to ignore if claude works; otherwise export the env var |
+| Captures are 0 bytes / viewer shows `parse error` (Windows non-UTF-8 locale) | addon could not encode CJK/emoji under cp936/cp932/cp949 | upgrade to v0.4.1+ (forces UTF-8 + `PYTHONUTF8=1`); check `~/.claude-capture/mitmweb.log` for `[addon] ERROR` lines |
 
 ## License
 
