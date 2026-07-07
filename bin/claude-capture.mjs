@@ -330,8 +330,17 @@ async function main() {
 
   await fs.mkdir(opts.captures, { recursive: true });
 
+  // mitmweb 的 stderr 落盘到日志文件 —— addon 的 [addon] ERROR 之前被 stdio: ignore
+  // 完全吞掉，导致 Windows 非 UTF-8 区域下 0 字节 captures 这种静默失败无法排查
+  // （见 issue #1）。stdout 仍 ignore，避免和 claude 的 TUI 撕裂。
+  const mitmLogPath = path.join(path.dirname(opts.captures), "mitmweb.log");
+  const mitmLogFd = fsSync.openSync(mitmLogPath, "a");
+  // 写一行分隔标记，方便多次运行后从日志里区分本次会话。
+  fsSync.writeSync(mitmLogFd, `\n==== claude-capture ${new Date().toISOString()} ====\n`);
+
   process.stdout.write(BANNER + "\n");
   process.stdout.write(`  captures : ${opts.captures}\n`);
+  process.stdout.write(`  mitm.log : ${mitmLogPath}\n`);
   process.stdout.write(`  proxy    : http://127.0.0.1:${opts.portProxy}  (mitmweb + addon)\n`);
   process.stdout.write(`  mitmweb  : http://127.0.0.1:${opts.portMitmweb}  (raw flow inspector)\n`);
   process.stdout.write(`  viewer   : http://127.0.0.1:${opts.portViewer}  (anthropic captures)\n`);
@@ -367,10 +376,11 @@ async function main() {
         // 即使将来出现新的写盘点也能在 Windows 非 UTF-8 区域下安全工作。
         PYTHONUTF8: "1",
       },
-      // mitmweb 的 stdout/stderr 直接丢弃 —— claude 用 stdio: "inherit" 接管终端，
-      // 让 mitm 的日志混进来会和 claude 的 TUI 互相撕裂。
+      // mitmweb 的 stdout 仍 ignore（避免和 claude TUI 撕裂），但 stderr 落到
+      // mitmLogFd 指向的日志文件 —— addon 的 [addon] ERROR 会出现在那里，
+      // 静默失败时可以 tail ~/.claude-capture/mitmweb.log 排查。
       // 启动失败仍会被下面的 probePort 兜住（5s 内没起来就 abort）。
-      stdio: ["ignore", "ignore", "ignore"],
+      stdio: ["ignore", "ignore", mitmLogFd],
       shell: IS_WIN,
     }
   );
