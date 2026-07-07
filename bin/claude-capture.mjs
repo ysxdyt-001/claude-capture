@@ -323,6 +323,47 @@ function openBrowser(url) {
   } catch {}
 }
 
+// Cross-platform process-tree kill.
+// 关键点：Windows 上 spawn(shell: true) 出来的 child 是 cmd.exe，真正的 mitmweb /
+// claude 进程是 cmd.exe 的子进程。child.kill() 只杀 cmd.exe，真正进程变孤儿
+// （这是用户报告的"关闭后服务残留"的根因）。taskkill /T /F 递归杀整棵进程树。
+//
+// Unix 上 child.kill(signal) 行为正确，沿用即可。
+function killTree(child, signal) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  const pid = child.pid;
+  if (pid == null) return;
+  try {
+    if (IS_WIN) {
+      // /T 递归子进程，/F 强制（SIGKILL 等价）。mitmweb 自己不捕 CTRL_BREAK，
+      // 直接 TerminateProcess 是最稳的。
+      spawn("taskkill", ["/T", "/F", "/PID", String(pid)], {
+        stdio: "ignore",
+        shell: false,
+      });
+    } else {
+      child.kill(signal);
+    }
+  } catch {}
+}
+
+// 同步版本，仅供 process.on("exit") 兜底使用（exit handler 只能跑同步代码）。
+function killTreeSync(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  const pid = child.pid;
+  if (pid == null) return;
+  try {
+    if (IS_WIN) {
+      spawnSync("taskkill", ["/T", "/F", "/PID", String(pid)], {
+        stdio: "ignore",
+        shell: false,
+      });
+    } else {
+      try { process.kill(pid, "SIGKILL"); } catch {}
+    }
+  } catch {}
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
 
@@ -412,32 +453,45 @@ async function main() {
     shell: IS_WIN,
   });
 
-  // 6) 生命周期：claude 退出 → 清理 mitm
+  // 6) 生命周期：claude 退出 / 信号 → 树杀清理。
+  // 之前用 child.kill()，Windows 下 child 是 cmd.exe（shell:true 包装），真正的
+  // mitmweb / claude 是 cmd.exe 的子进程，kill 只杀 cmd.exe → 真进程变孤儿
+  // （用户报告的"关闭后服务残留"）。现在统一走 killTree，Windows 用 taskkill /T /F。
   let shuttingDown = false;
   const cleanup = (signal) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    try { claude.kill(signal); } catch {}
+    killTree(claude, signal);
     setTimeout(() => {
-      try { mitm.kill(IS_WIN ? "SIGTERM" : signal); } catch {}
-      // Windows: taskkill /T /F would be more thorough for grandchildren, but
-      // mitmweb here has no children of its own (the addon runs in-process).
+      killTree(mitm, IS_WIN ? "SIGTERM" : signal);
       setTimeout(() => process.exit(0), 200);
     }, 100);
   };
+  // SIGINT (Ctrl+C)、SIGTERM (kill)、SIGHUP (终端关闭)、SIGQUIT (Ctrl+\)、
+  // SIGBREAK (Windows Ctrl+Break / 关控制台) 全部走 cleanup。
   process.on("SIGINT", () => cleanup("SIGINT"));
   process.on("SIGTERM", () => cleanup("SIGTERM"));
+  process.on("SIGHUP", () => cleanup("SIGHUP"));
+  process.on("SIGQUIT", () => cleanup("SIGQUIT"));
+  process.on("SIGBREAK", () => cleanup("SIGBREAK"));
+
+  // 最后兜底：如果上面的 setTimeout 还没跑到进程就被强制收掉（例如 SIGKILL 之外
+  // 的路径触发了 process.exit），exit handler 里同步树杀一次。仅 best-effort。
+  process.on("exit", () => {
+    killTreeSync(claude);
+    killTreeSync(mitm);
+  });
 
   // Spawn-time 错误兜底：preflight 通过 → spawn 之间出现竞态（bin 被删 / PATH 改动）
   // 时，没有 'error' 事件 Node 会抛裸 stack。这里转成可读的 fatal 后再清理。
   claude.on("error", (err) => {
     process.stderr.write(`\n  fatal: ${opts.claudeBin} failed to start: ${err.message}\n\n`);
-    try { mitm.kill("SIGTERM"); } catch {}
+    killTree(mitm, "SIGTERM");
     setTimeout(() => process.exit(1), 100);
   });
 
   claude.on("exit", (code) => {
-    try { mitm.kill("SIGTERM"); } catch {}
+    killTree(mitm, "SIGTERM");
     setTimeout(() => process.exit(code ?? 0), 200);
   });
 }
