@@ -85,7 +85,7 @@ body::after {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 340px 4px 1fr;
   height: 100vh;
 }
 
@@ -1238,4 +1238,18 @@ details summary:hover {
   color: var(--text-faint);
   font-size: 10px;
   margin-left: auto;
+}
+
+/* ============ SIDEBAR RESIZE HANDLE ============ */
+.sidebar-resize-handle {
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+  transition: background 0.15s ease;
+}
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--sage-bright);
+  opacity: 0.6;
 }
