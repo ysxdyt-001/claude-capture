@@ -12,8 +12,7 @@ export function looksLikeJSON(s: string): boolean {
 // 基于词法分析的 JSON 高亮器。输入为原始 JSON 字符串，输出 HTML。
 // Tokenizer-based JSON syntax highlighter. Input is raw JSON string; output is HTML.
 export function highlightJSON(jsonStr: string | object): string {
-  const json =
-    typeof jsonStr === "string" ? jsonStr : JSON.stringify(jsonStr, null, 2);
+  const json = typeof jsonStr === "string" ? jsonStr : JSON.stringify(jsonStr, null, 2);
   let out = "";
   let i = 0;
   const n = json.length;

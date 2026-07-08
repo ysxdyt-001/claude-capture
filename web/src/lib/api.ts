@@ -6,6 +6,6 @@ export async function fetchFiles(): Promise<ListItem[]> {
 }
 
 export async function fetchFile(name: string): Promise<Capture> {
-  const res = await fetch("/api/file?name=" + encodeURIComponent(name));
+  const res = await fetch(`/api/file?name=${encodeURIComponent(name)}`);
   return (await res.json()) as Capture;
 }

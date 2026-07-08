@@ -1,7 +1,7 @@
-import type { ToolResultBlock, ToolResultContent } from "../types";
-import { smartRender } from "../lib/markdown";
-import { highlightJSON } from "../lib/json";
 import { escapeHtml } from "../lib/format";
+import { highlightJSON } from "../lib/json";
+import { smartRender } from "../lib/markdown";
+import type { ToolResultBlock, ToolResultContent } from "../types";
 import CollapseWrap from "./CollapseWrap";
 
 interface ToolResultProps {
@@ -44,9 +44,7 @@ export default function ToolResult({ toolResult, variant }: ToolResultProps) {
   if (variant === "pair") {
     return (
       <div className={`tool-pair-result${isErr ? " err" : ""}`}>
-        <div className="tool-pair-result-label">
-          {isErr ? "error result" : "result"}
-        </div>
+        <div className="tool-pair-result-label">{isErr ? "error result" : "result"}</div>
         <div className="tool-pair-result-body">
           {shouldCollapse ? (
             <CollapseWrap bodyHtml={bodyHtml} />

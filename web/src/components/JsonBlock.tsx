@@ -6,8 +6,7 @@ interface JsonBlockProps {
 }
 
 export default function JsonBlock({ value, variant = "block" }: JsonBlockProps) {
-  const json =
-    typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const json = typeof value === "string" ? value : JSON.stringify(value, null, 2);
   const html = highlightJSON(json);
   const cls = variant === "block" ? "json j-block" : "json";
   return <pre className={cls} dangerouslySetInnerHTML={{ __html: html }} />;

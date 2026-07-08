@@ -1,9 +1,4 @@
-import type {
-  ContentBlock,
-  Message,
-  ToolResultBlock,
-  ToolUseBlock,
-} from "../types";
+import type { ContentBlock, Message, ToolResultBlock, ToolUseBlock } from "../types";
 
 export type ConversationItem =
   | { kind: "system"; message: Message }
@@ -26,9 +21,7 @@ export type ConversationItem =
 // Walk the message list and emit render-items. tool_use blocks are paired
 // with their matching tool_result (by tool_use_id) so they render as one card;
 // pure-tool-result user messages are absorbed and not rendered standalone.
-export function buildConversationItems(
-  messages: Message[],
-): ConversationItem[] {
+export function buildConversationItems(messages: Message[]): ConversationItem[] {
   const resultsById = new Map<string, ToolResultBlock>();
   for (const m of messages) {
     if (Array.isArray(m?.content)) {
@@ -38,10 +31,7 @@ export function buildConversationItems(
           (b as ToolResultBlock).type === "tool_result" &&
           (b as ToolResultBlock).tool_use_id
         ) {
-          resultsById.set(
-            (b as ToolResultBlock).tool_use_id,
-            b as ToolResultBlock,
-          );
+          resultsById.set((b as ToolResultBlock).tool_use_id, b as ToolResultBlock);
         }
       }
     }
@@ -64,10 +54,7 @@ export function buildConversationItems(
       if (
         Array.isArray(c) &&
         c.length > 0 &&
-        c.every(
-          (b) =>
-            b && (b as ToolResultBlock).type === "tool_result",
-        )
+        c.every((b) => b && (b as ToolResultBlock).type === "tool_result")
       ) {
         continue;
       }
@@ -103,7 +90,7 @@ export function buildConversationItems(
         if (b && (b as ToolUseBlock).type === "tool_use") {
           flush();
           const tu = b as ToolUseBlock;
-          const result = tu.id ? resultsById.get(tu.id) ?? null : null;
+          const result = tu.id ? (resultsById.get(tu.id) ?? null) : null;
           items.push({ kind: "tool-pair", toolUse: tu, toolResult: result });
         } else {
           buf.push(b);

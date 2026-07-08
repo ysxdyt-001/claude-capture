@@ -1,5 +1,5 @@
-import type { ListItem } from "../types";
 import { formatTime } from "../lib/format";
+import type { ListItem } from "../types";
 
 interface ConversationListProps {
   items: ListItem[];
@@ -7,16 +7,11 @@ interface ConversationListProps {
   onSelect: (name: string) => void;
 }
 
-export default function ConversationList({
-  items,
-  selectedName,
-  onSelect,
-}: ConversationListProps) {
+export default function ConversationList({ items, selectedName, onSelect }: ConversationListProps) {
   return (
     <div className="file-list">
       {items.map((it) => {
-        const badgeCls =
-          it.status === 200 ? "ok" : it.status ? "err" : "neutral";
+        const badgeCls = it.status === 200 ? "ok" : it.status ? "err" : "neutral";
         return (
           <div
             key={it.name}

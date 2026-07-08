@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 interface CollapseWrapProps {
   bodyHtml: string;
@@ -12,15 +12,9 @@ export default function CollapseWrap({ bodyHtml, bodyNode }: CollapseWrapProps) 
   return (
     <div className={`collapse-wrap${open ? " open" : ""}`}>
       <div className="collapse-body">
-        {bodyNode ?? (
-          <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
-        )}
+        {bodyNode ?? <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />}
       </div>
-      <button
-        type="button"
-        className="collapse-toggle"
-        onClick={() => setOpen((o) => !o)}
-      >
+      <button type="button" className="collapse-toggle" onClick={() => setOpen((o) => !o)}>
         <span className="show-more">▼ expand</span>
         <span className="show-less">▲ collapse</span>
       </button>

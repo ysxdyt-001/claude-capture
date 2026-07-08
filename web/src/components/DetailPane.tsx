@@ -1,13 +1,13 @@
-import type { Capture } from "../types";
 import { useState } from "react";
-import Toolbar from "./Toolbar";
-import Tabs, { type TabId } from "./Tabs";
+import type { Capture } from "../types";
 import ConversationTab from "./ConversationTab";
-import SseTimeline from "./SseTimeline";
+import EmptyState from "./EmptyState";
+import RawJsonTab from "./RawJsonTab";
 import RequestTab from "./RequestTab";
 import ResponseTab from "./ResponseTab";
-import RawJsonTab from "./RawJsonTab";
-import EmptyState from "./EmptyState";
+import SseTimeline from "./SseTimeline";
+import Tabs, { type TabId } from "./Tabs";
+import Toolbar from "./Toolbar";
 
 interface DetailPaneProps {
   capture: Capture | null;
@@ -15,11 +15,7 @@ interface DetailPaneProps {
   onRefresh: () => void;
 }
 
-export default function DetailPane({
-  capture,
-  filename,
-  onRefresh,
-}: DetailPaneProps) {
+export default function DetailPane({ capture, filename, onRefresh }: DetailPaneProps) {
   const [tab, setTab] = useState<TabId>("conv");
 
   if (!capture) {
@@ -27,11 +23,7 @@ export default function DetailPane({
       <main className="main">
         <Toolbar filename={null} onRefresh={onRefresh} />
         <div className="content">
-          <EmptyState
-            big="Awaiting inspection"
-            small="SELECT A CAPTURE FROM THE ARCHIVE"
-            arrow
-          />
+          <EmptyState big="Awaiting inspection" small="SELECT A CAPTURE FROM THE ARCHIVE" arrow />
         </div>
       </main>
     );

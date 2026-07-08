@@ -34,9 +34,7 @@ export function renderMarkdown(src: string): string {
     if (lowLang === "json") {
       const raw = unescapeHtml(cleanCode);
       return keep(
-        `<pre class="md-code j-block" data-lang="json"><code>${highlightJSON(
-          raw,
-        )}</code></pre>`,
+        `<pre class="md-code j-block" data-lang="json"><code>${highlightJSON(raw)}</code></pre>`,
       );
     }
     return keep(`<pre class="md-code" data-lang="${lang}"><code>${cleanCode}</code></pre>`);
@@ -99,9 +97,7 @@ export function renderMarkdown(src: string): string {
       flushPara();
       flushList();
       out.push(
-        `<blockquote class="md-quote">${inlineFmt(
-          line.replace(/^&gt;\s?/, ""),
-        )}</blockquote>`,
+        `<blockquote class="md-quote">${inlineFmt(line.replace(/^&gt;\s?/, ""))}</blockquote>`,
       );
       continue;
     }

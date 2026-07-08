@@ -5,12 +5,7 @@ interface EmptyStateProps {
   style?: React.CSSProperties;
 }
 
-export default function EmptyState({
-  big,
-  small,
-  arrow = false,
-  style,
-}: EmptyStateProps) {
+export default function EmptyState({ big, small, arrow = false, style }: EmptyStateProps) {
   return (
     <div className="empty" style={style}>
       <div className="big">{big}</div>

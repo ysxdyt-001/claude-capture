@@ -1,5 +1,5 @@
-import type { Capture } from "../types";
 import { redactHeaders } from "../lib/redact";
+import type { Capture } from "../types";
 import JsonBlock from "./JsonBlock";
 
 interface RequestTabProps {

@@ -11,9 +11,7 @@ interface RebuildBlock {
 
 // 从 SSE 事件序列重建 assistant 的 content blocks。
 // Reconstruct assistant content blocks from the SSE event stream.
-export function rebuildAssistantFromSSE(
-  events: SseEvent[] | undefined,
-): ContentBlock[] | null {
+export function rebuildAssistantFromSSE(events: SseEvent[] | undefined): ContentBlock[] | null {
   if (!events || events.length === 0) return null;
   const blocks = new Map<number, RebuildBlock>();
   const order: number[] = [];
@@ -34,15 +32,9 @@ export function rebuildAssistantFromSSE(
       const delta = (data.delta || {}) as Record<string, unknown>;
       if (delta.type === "text_delta" && typeof delta.text === "string") {
         blk.text = (blk.text || "") + delta.text;
-      } else if (
-        delta.type === "thinking_delta" &&
-        typeof delta.thinking === "string"
-      ) {
+      } else if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
         blk.thinking = (blk.thinking || "") + delta.thinking;
-      } else if (
-        delta.type === "input_json_delta" &&
-        typeof delta.partial_json === "string"
-      ) {
+      } else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string") {
         blk._raw_input = (blk._raw_input || "") + delta.partial_json;
       }
     }

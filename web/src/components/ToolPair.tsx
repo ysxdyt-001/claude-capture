@@ -1,6 +1,6 @@
-import type { ToolResultBlock, ToolUseBlock } from "../types";
-import { highlightJSON } from "../lib/json";
 import { escapeHtml } from "../lib/format";
+import { highlightJSON } from "../lib/json";
+import type { ToolResultBlock, ToolUseBlock } from "../types";
 import ToolResult from "./ToolResult";
 
 interface ToolPairProps {
@@ -13,15 +13,9 @@ export default function ToolPair({ toolUse, toolResult }: ToolPairProps) {
   const inputJson = JSON.stringify(input, null, 2);
   const isCompact = !inputJson.includes("\n") && inputJson.length <= 80;
   const inputInner = isCompact ? (
-    <code
-      className="j-inline"
-      dangerouslySetInnerHTML={{ __html: highlightJSON(inputJson) }}
-    />
+    <code className="j-inline" dangerouslySetInnerHTML={{ __html: highlightJSON(inputJson) }} />
   ) : (
-    <pre
-      className="j-block flat"
-      dangerouslySetInnerHTML={{ __html: highlightJSON(inputJson) }}
-    />
+    <pre className="j-block flat" dangerouslySetInnerHTML={{ __html: highlightJSON(inputJson) }} />
   );
 
   return (

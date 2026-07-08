@@ -1,8 +1,8 @@
-import type { Capture } from "../types";
 import { redactHeaders } from "../lib/redact";
 import { rebuildAssistantFromSSE } from "../lib/sse";
-import JsonBlock from "./JsonBlock";
+import type { Capture } from "../types";
 import EmptyState from "./EmptyState";
+import JsonBlock from "./JsonBlock";
 
 interface ResponseTabProps {
   capture: Capture;
@@ -13,8 +13,7 @@ export default function ResponseTab({ capture }: ResponseTabProps) {
   const sse = res.sse_events || [];
   const hasBody = res.body !== undefined && res.body !== null;
   const status = res.status_code ?? res.status;
-  const badgeCls =
-    status === 200 ? "ok" : status && status >= 400 ? "err" : "neutral";
+  const badgeCls = status === 200 ? "ok" : status && status >= 400 ? "err" : "neutral";
 
   const ct = res.headers?.["content-type"] || res.headers?.["Content-Type"] || "—";
 
@@ -48,66 +47,65 @@ export default function ResponseTab({ capture }: ResponseTabProps) {
         </>
       )}
 
-      {sse.length > 0 && (() => {
-        const rebuilt = rebuildAssistantFromSSE(sse);
-        if (!rebuilt) return null;
-        return (
-          <>
-            <h3 className="section">Reassembled content blocks</h3>
-            <div
-              style={{
-                marginBottom: 10,
-                color: "var(--text-dim)",
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                letterSpacing: "0.04em",
-              }}
-            >
-              {rebuilt.length} block{rebuilt.length === 1 ? "" : "s"} reconstructed
-              from {sse.length} SSE events
-            </div>
-            <JsonBlock value={rebuilt} />
-          </>
-        );
-      })()}
+      {sse.length > 0 &&
+        (() => {
+          const rebuilt = rebuildAssistantFromSSE(sse);
+          if (!rebuilt) return null;
+          return (
+            <>
+              <h3 className="section">Reassembled content blocks</h3>
+              <div
+                style={{
+                  marginBottom: 10,
+                  color: "var(--text-dim)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {rebuilt.length} block{rebuilt.length === 1 ? "" : "s"} reconstructed from{" "}
+                {sse.length} SSE events
+              </div>
+              <JsonBlock value={rebuilt} />
+            </>
+          );
+        })()}
 
-      {hasBody && (() => {
-        let bodyStr: string;
-        try {
-          bodyStr =
-            typeof res.body === "string"
-              ? res.body
-              : JSON.stringify(res.body, null, 2);
-        } catch {
-          bodyStr = String(res.body);
-        }
-        const trimmed = bodyStr.trim();
-        const isJson = trimmed.startsWith("{") || trimmed.startsWith("[");
-        if (isJson) {
+      {hasBody &&
+        (() => {
+          let bodyStr: string;
           try {
-            const parsed = JSON.parse(trimmed);
-            return (
-              <>
-                <h3 className="section">Response body</h3>
-                <JsonBlock value={parsed} />
-              </>
-            );
+            bodyStr = typeof res.body === "string" ? res.body : JSON.stringify(res.body, null, 2);
           } catch {
-            return (
-              <>
-                <h3 className="section">Response body</h3>
-                <pre className="json">{bodyStr}</pre>
-              </>
-            );
+            bodyStr = String(res.body);
           }
-        }
-        return (
-          <>
-            <h3 className="section">Response body</h3>
-            <pre className="json">{bodyStr}</pre>
-          </>
-        );
-      })()}
+          const trimmed = bodyStr.trim();
+          const isJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+          if (isJson) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              return (
+                <>
+                  <h3 className="section">Response body</h3>
+                  <JsonBlock value={parsed} />
+                </>
+              );
+            } catch {
+              return (
+                <>
+                  <h3 className="section">Response body</h3>
+                  <pre className="json">{bodyStr}</pre>
+                </>
+              );
+            }
+          }
+          return (
+            <>
+              <h3 className="section">Response body</h3>
+              <pre className="json">{bodyStr}</pre>
+            </>
+          );
+        })()}
 
       {sse.length === 0 && !hasBody && (
         <EmptyState

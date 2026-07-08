@@ -7,7 +7,7 @@ export function redactHeaders(h: Headers | undefined): Headers {
   for (const k of Object.keys(out)) {
     if (/auth|x-api-key|authorization|token/i.test(k)) {
       const v = out[k];
-      out[k] = (v != null ? String(v) : "").slice(0, 8) + "…";
+      out[k] = `${(v != null ? String(v) : "").slice(0, 8)}…`;
     }
   }
   return out;

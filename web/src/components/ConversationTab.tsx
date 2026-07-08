@@ -1,6 +1,6 @@
-import type { Capture, Message as MessageType } from "../types";
 import { buildConversationItems } from "../lib/conversation";
 import { rebuildAssistantFromSSE } from "../lib/sse";
+import type { Capture, Message as MessageType } from "../types";
 import Message, { SystemMessage } from "./Message";
 import ToolPair from "./ToolPair";
 
@@ -18,10 +18,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
   // Build the chronological thread: system → request messages → SSE reply.
   const all: MessageType[] = [];
   if (req.system) {
-    const sys =
-      typeof req.system === "string"
-        ? req.system
-        : JSON.stringify(req.system, null, 2);
+    const sys = typeof req.system === "string" ? req.system : JSON.stringify(req.system, null, 2);
     all.push({ role: "system", content: sys });
   }
   for (const m of messages) all.push(m);
@@ -35,9 +32,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
 
   const items = buildConversationItems(all);
   const toolPairCount = items.filter((i) => i.kind === "tool-pair").length;
-  const textTurnCount = items.filter(
-    (i) => i.kind !== "tool-pair" && i.kind !== "system",
-  ).length;
+  const textTurnCount = items.filter((i) => i.kind !== "tool-pair" && i.kind !== "system").length;
   const status = capture.response?.status_code;
   const statusBadgeCls = status === 200 ? "ok" : "err";
 
@@ -84,13 +79,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
           case "assistant":
             return <Message key={i} message={it.message} idx={it.idx} blocks={it.blocks} />;
           case "tool-pair":
-            return (
-              <ToolPair
-                key={i}
-                toolUse={it.toolUse}
-                toolResult={it.toolResult}
-              />
-            );
+            return <ToolPair key={i} toolUse={it.toolUse} toolResult={it.toolResult} />;
           default:
             return <Message key={i} message={it.message} idx={it.idx} />;
         }

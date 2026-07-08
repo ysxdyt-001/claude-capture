@@ -1,5 +1,5 @@
-import type { Capture } from "../types";
 import { escapeHtml } from "../lib/format";
+import type { Capture } from "../types";
 import EmptyState from "./EmptyState";
 
 interface SseTimelineProps {
@@ -14,11 +14,7 @@ export default function SseTimeline({ capture }: SseTimelineProps) {
         <EmptyState big="No stream captured" small="RESPONSE WAS NOT SSE · SEE BODY BELOW" />
         <h3 className="section">Response body</h3>
         <pre className="json">
-          {JSON.stringify(
-            capture.response?.body ?? capture.response ?? {},
-            null,
-            2,
-          )}
+          {JSON.stringify(capture.response?.body ?? capture.response ?? {}, null, 2)}
         </pre>
       </div>
     );
@@ -48,11 +44,10 @@ export default function SseTimeline({ capture }: SseTimelineProps) {
               : name.includes("error")
                 ? "error"
                 : "";
-          const dataStr =
-            typeof ev.data === "string" ? ev.data : JSON.stringify(ev.data);
+          const dataStr = typeof ev.data === "string" ? ev.data : JSON.stringify(ev.data);
           const preview =
             dataStr.length > 500
-              ? dataStr.slice(0, 500) + ` … (+${dataStr.length - 500})`
+              ? `${dataStr.slice(0, 500)} … (+${dataStr.length - 500})`
               : dataStr;
           return (
             <div className="sse-item" key={i}>
@@ -61,10 +56,7 @@ export default function SseTimeline({ capture }: SseTimelineProps) {
                 className={`sse-event ${cls}`}
                 dangerouslySetInnerHTML={{ __html: escapeHtml(name) }}
               />
-              <div
-                className="sse-data"
-                dangerouslySetInnerHTML={{ __html: escapeHtml(preview) }}
-              />
+              <div className="sse-data" dangerouslySetInnerHTML={{ __html: escapeHtml(preview) }} />
             </div>
           );
         })}

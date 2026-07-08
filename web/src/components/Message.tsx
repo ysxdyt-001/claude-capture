@@ -1,9 +1,9 @@
-import type { ContentBlock, Message as MessageType } from "../types";
 import { escapeHtml } from "../lib/format";
-import { smartRender } from "../lib/markdown";
 import { highlightJSON } from "../lib/json";
-import ToolResult from "./ToolResult";
+import { smartRender } from "../lib/markdown";
+import type { ContentBlock, Message as MessageType } from "../types";
 import type { ToolResultBlock, ToolUseBlock } from "../types";
+import ToolResult from "./ToolResult";
 
 interface MessageProps {
   message: MessageType;
@@ -31,9 +31,7 @@ function renderBlockHtml(b: ContentBlock, _role: string): string {
     const isCompact = !inputJson.includes("\n") && inputJson.length <= 80;
     const inputHtml = isCompact
       ? `<code class="j-inline">${highlightJSON(inputJson)}</code>`
-      : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(
-          inputJson,
-        )}</pre></div>`;
+      : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(inputJson)}</pre></div>`;
     return `<div class="tool-call">
       <div class="tool-head">
         <span class="name">${escapeHtml(tu.name || "")}</span>
@@ -68,9 +66,8 @@ export default function Message({ message, idx, blocks }: MessageProps) {
   if (typeof message.content === "string") {
     bodyBlocks.html = `<div class="msg-text">${smartRender(message.content)}</div>`;
   } else if (
-    blocks ?? (Array.isArray(message.content)
-      ? (message.content as ContentBlock[])
-      : null)
+    blocks ??
+    (Array.isArray(message.content) ? (message.content as ContentBlock[]) : null)
   ) {
     // 优先使用调用方传入的 blocks（已过滤 tool_use），否则回退到 message.content。
     // Prefer caller-supplied blocks (tool_use already filtered out); fall back to message.content.
@@ -106,17 +103,10 @@ export default function Message({ message, idx, blocks }: MessageProps) {
 
   return (
     <div className={`msg ${cls}`}>
-      {idx != null && (
-        <span className="turn-num">{String(idx).padStart(2, "0")}</span>
-      )}
-      <div
-        className="msg-role"
-        dangerouslySetInnerHTML={{ __html: escapeHtml(tag) }}
-      />
+      {idx != null && <span className="turn-num">{String(idx).padStart(2, "0")}</span>}
+      <div className="msg-role" dangerouslySetInnerHTML={{ __html: escapeHtml(tag) }} />
       <div className="msg-body">
-        {bodyBlocks.html && (
-          <div dangerouslySetInnerHTML={{ __html: bodyBlocks.html }} />
-        )}
+        {bodyBlocks.html && <div dangerouslySetInnerHTML={{ __html: bodyBlocks.html }} />}
         {bodyBlocks.standaloneToolResults.map((tr, i) => (
           <ToolResult key={i} toolResult={tr} variant="standalone" />
         ))}
@@ -135,9 +125,7 @@ export function SystemMessage({ message }: { message: MessageType }) {
   const body =
     typeof message.content === "string"
       ? smartRender(message.content)
-      : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(
-          text,
-        )}</pre></div>`;
+      : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(text)}</pre></div>`;
   return (
     <details className="msg system collapsible-card">
       <summary>
