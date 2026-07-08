@@ -82,7 +82,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
           case "user":
             return <Message key={i} message={it.message} idx={it.idx} />;
           case "assistant":
-            return <Message key={i} message={it.message} idx={it.idx} />;
+            return <Message key={i} message={it.message} idx={it.idx} blocks={it.blocks} />;
           case "tool-pair":
             return (
               <ToolPair

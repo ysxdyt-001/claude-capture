@@ -8,6 +8,9 @@ import type { ToolResultBlock, ToolUseBlock } from "../types";
 interface MessageProps {
   message: MessageType;
   idx?: number;
+  // 可选的过滤后块列表；assistant 项传入以避免 tool_use 重复渲染。
+  // Optional pre-filtered blocks; passed by assistant items to avoid duplicate tool_use rendering.
+  blocks?: ContentBlock[];
 }
 
 function renderBlockHtml(b: ContentBlock, _role: string): string {
@@ -46,7 +49,7 @@ function renderBlockHtml(b: ContentBlock, _role: string): string {
   return `<pre class="json">${escapeHtml(JSON.stringify(b, null, 2))}</pre>`;
 }
 
-export default function Message({ message, idx }: MessageProps) {
+export default function Message({ message, idx, blocks }: MessageProps) {
   const role = message.role;
   const cls =
     role === "user"
@@ -64,8 +67,15 @@ export default function Message({ message, idx }: MessageProps) {
 
   if (typeof message.content === "string") {
     bodyBlocks.html = `<div class="msg-text">${smartRender(message.content)}</div>`;
-  } else if (Array.isArray(message.content)) {
-    for (const b of message.content as ContentBlock[]) {
+  } else if (
+    blocks ?? (Array.isArray(message.content)
+      ? (message.content as ContentBlock[])
+      : null)
+  ) {
+    // 优先使用调用方传入的 blocks（已过滤 tool_use），否则回退到 message.content。
+    // Prefer caller-supplied blocks (tool_use already filtered out); fall back to message.content.
+    const source = blocks ?? (message.content as ContentBlock[]);
+    for (const b of source) {
       if (b.type === "thinking") {
         // thinking handled by component below in assistant rendering path
         bodyBlocks.html += `<div class="msg-thinking">${escapeHtml(
