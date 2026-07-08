@@ -11,6 +11,9 @@ There is **no test suite**. The viewer UI (`web/`) has a build step (Vite → `d
 ## Running locally
 
 ```bash
+# First time only: build the viewer UI (dist/ is gitignored)
+cd web && npm install && npm run build && cd ..
+
 # Link the local bin so `claude-capture` resolves to this checkout
 npm link
 
