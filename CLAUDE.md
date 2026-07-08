@@ -6,11 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `claude-capture` is a globally-installed Node CLI that launches three coordinated services from a single command: a mitmweb proxy (with a custom addon that records Anthropic `/messages` traffic), an in-process viewer HTTP server, and the `claude` CLI itself wired to route through the proxy. The user runs it from any directory to inspect Claude Code ↔ Anthropic HTTP traffic.
 
-There is **no build step, no test suite, no lint config**. The package is shipped as raw source (`bin/`, `lib/`, `public/`) — `npm install -g .` is the only packaging operation. Target: Node ≥ 20, mitmproxy ≥ 10.
+There is **no test suite**. The viewer UI (`web/`) has a build step (Vite → `dist/`); the CLI itself (`bin/`, `lib/`) is still raw source with no build. The package is shipped as `bin/` + `lib/` + `dist/` (built UI) — `npm install -g .` is the only packaging operation (a `prepublishOnly` script builds `dist/` from `web/` before publish). Target: Node ≥ 20, mitmproxy ≥ 10.
 
 ## Running locally
 
 ```bash
+# First time only: build the viewer UI (dist/ is gitignored)
+cd web && npm install && npm run build && cd ..
+
 # Link the local bin so `claude-capture` resolves to this checkout
 npm link
 
@@ -26,9 +29,18 @@ To debug `addon.py` standalone against an already-running proxy:
 mitmweb -s lib/addon.py   # addon falls back to ./captures/ when CLAUDE_CAPTURE_DIR is unset
 ```
 
+To develop or rebuild the viewer UI (React/Vite app in `web/`):
+```bash
+# Develop with hot reload (Vite proxies /api/* to a running viewer server)
+cd web && npm install && npm run dev
+
+# Build the viewer for release (outputs to ../dist/)
+cd web && npm run build
+```
+
 ## Architecture
 
-The entire program is one orchestrator plus three sidekicks. There is no framework, no transpilation.
+The entire program is one orchestrator plus three sidekicks. The CLI (`bin/`, `lib/`) uses no framework and no transpilation; the viewer UI (`web/`) uses React + Vite + TypeScript and compiles to `dist/`.
 
 ### `bin/claude-capture.mjs` — the orchestrator (single file, ~410 lines)
 Owns the full lifecycle. Read this file first — it defines every cross-cutting concern:
@@ -42,12 +54,13 @@ Owns the full lifecycle. Read this file first — it defines every cross-cutting
 Loaded by mitmweb via `-s`. Writes one JSON file per `/messages` request to `$CLAUDE_CAPTURE_DIR` (CLI injects this; falls back to `./captures/` for standalone debugging). The `response` hook captures both streaming (`text/event-stream` → parsed into `sse_events[]`) and non-streaming bodies. **Only** paths containing `/messages` are captured — that filter is the entire scope of the addon. The CLI injects `CLAUDE_CAPTURE_DIR` via mitmweb's env.
 
 ### `lib/server.mjs` — the viewer backend (in-process, ~120 lines)
-Plain `node:http`. Three routes: `GET /api/files` (lists + previews captures, sorted by mtime desc), `GET /api/file?name=` (serves one capture; rejects `..` and `/`), and static files from `public/` (path-joined, with a `publicDir.startsWith` guard against traversal). Listens on `127.0.0.1` only.
+Plain `node:http`. Three routes: `GET /api/files` (lists + previews captures, sorted by mtime desc), `GET /api/file?name=` (serves one capture; rejects `..` and `/`), and static files from `dist/` (path-joined, with a `publicDir.startsWith` guard against traversal). Listens on `127.0.0.1` only.
 
-### `public/index.html` — the viewer frontend (single file, ~1800 lines)
-Self-contained: HTML + CSS + vanilla JS, no build, no framework, no dependencies. Fetches `/api/files` and `/api/file?name=`. Renders the Conversation / SSE Timeline / Request / Response / Raw JSON tabs. API keys are redacted client-side when rendered.
+### `web/` — the viewer frontend source (React + Vite + TypeScript)
+The viewer UI is a React SPA built with Vite. Source lives in `web/src/`; `npm run build` compiles to `dist/` (served by `lib/server.mjs`). Fetches `/api/files` and `/api/file?name=`. Renders the Conversation / SSE Timeline / Request / Response / Raw JSON tabs. API keys are redacted client-side when rendered. During development, `npm run dev` starts the Vite dev server with hot reload and proxies `/api/*` to the CLI's viewer server.
 
 ### How the pieces find each other
+- `web/` source → `npm run build` (Vite) → `dist/` → served by `lib/server.mjs`. The CLI sets the viewer backend's `publicDir` to `dist/`.
 - CLI sets `CLAUDE_CAPTURE_DIR` env → mitmweb inherits it → `addon.py` reads it.
 - CLI sets `HTTPS_PROXY`/`HTTP_PROXY`/`NODE_EXTRA_CA_CERTS` env → `claude` inherits it → traffic routes through mitmweb → addon sees `/messages` → writes JSON to disk → viewer's `listCaptures` picks it up.
 - The viewer and mitmweb's Web UI are independent HTTP servers; the viewer only reads files from disk, it does not talk to mitmweb.
@@ -56,6 +69,6 @@ Self-contained: HTML + CSS + vanilla JS, no build, no framework, no dependencies
 
 - **Comments are bilingual** (Chinese + English). When editing, match the surrounding style — most explanation lives in a header comment per file, with inline comments in Chinese where the orchestrator does something non-obvious (port asymmetry, spawn order, Windows `.cmd` handling).
 - **Cross-platform is load-bearing.** Every `spawn` call must consider Windows: `.cmd`/`.bat` wrappers need `shell: true` (IS_WIN). Use `os.homedir()` not `$HOME`. Browser open branches on `IS_MAC` / `IS_WIN` / else `xdg-open`.
-- **No new dependencies.** `package.json` has zero runtime deps and the file list is locked (`bin`, `lib`, `public`, `README.md`). Anything new must be implementable with Node built-ins (or, for the addon, the mitmproxy API).
+- **No new runtime dependencies.** Root `package.json` has zero runtime deps and the file list is locked (`bin`, `lib`, `dist`, `README.md`). Anything new in the CLI/addon must be implementable with Node built-ins (or, for the addon, the mitmproxy API). Dev/build tooling (React, Vite, TypeScript, Biome) lives in `web/package.json` and does not affect end users — `npm install -g claude-capture` does not install dev dependencies.
 - **Captures may contain real API tokens and full conversation history** (including any code/secrets pasted into claude). Default capture dir lives outside any git repo for this reason. Never log capture contents to stdout; the addon prints only the filename + status + byte count.
 - **The `--port-*` explicit/auto distinction matters.** Auto-pick (default) silently moves to the next free port and notes it in the banner; explicit `--port-*` must hard-error if busy rather than override the user's choice. Preserve this when touching port logic.

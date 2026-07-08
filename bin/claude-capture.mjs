@@ -18,7 +18,9 @@ const IS_MAC = process.platform === "darwin";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(__dirname, "..");
 const ADDON_PATH = path.join(PKG_ROOT, "lib", "addon.py");
-const PUBLIC_DIR = path.join(PKG_ROOT, "public");
+// 静态资源目录：Vite 构建产物（web/ 源码经 npm run build 生成）。
+// Static assets dir: Vite build output (built from web/ source via npm run build).
+const PUBLIC_DIR = path.join(PKG_ROOT, "dist");
 const MITM_CA = path.join(os.homedir(), ".mitmproxy", "mitmproxy-ca-cert.pem");
 
 const MIN_NODE_MAJOR = 20;

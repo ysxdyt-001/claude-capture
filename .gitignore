@@ -24,3 +24,7 @@ Thumbs.db
 
 # Captures (may contain real API tokens / conversation history)
 captures/
+
+# web/ frontend (Vite + React)
+web/node_modules/
+web/tsconfig.tsbuildinfo
