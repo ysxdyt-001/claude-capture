@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatTime, relativeTime, truncatePreview } from "../lib/format";
+import { formatTime } from "../lib/format";
 import { type SessionGroup, groupSessionsByPath } from "../lib/groupSessions";
 import type { ListItem } from "../types";
 
@@ -63,9 +63,8 @@ function SessionNode({ group, collapsed, selectedName, onToggle, onSelect }: Ses
     <div className="session-group">
       <button type="button" className="session-header" onClick={onToggle}>
         <span className="caret">{collapsed ? "▸" : "▾"}</span>
-        <span className="session-time">{relativeTime(group.newestMtime)}</span>
-        <span className="session-count">{group.captures.length} captures</span>
-        <span className="session-preview">{truncatePreview(group.openingPreview)}</span>
+        <span className="session-key">{group.key}</span>
+        <span className="session-count">[{group.captures.length}]</span>
       </button>
       {!collapsed &&
         group.captures.map((it) => {
