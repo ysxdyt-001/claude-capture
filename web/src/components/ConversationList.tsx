@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatTime, relativeTime, truncatePreview } from "../lib/format";
 import { type SessionGroup, groupSessionsByPath } from "../lib/groupSessions";
 import type { ListItem } from "../types";
@@ -16,12 +16,14 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
   // Collapsed-session keys. Empty set = all expanded.
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
 
-  // 挂载时折叠除最新 session 外的所有组（groups[0] 是最新，因为按 newestMtime desc 排序）。
-  // On mount, collapse every group except the newest (groups[0] is newest because of desc sort).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only run once on mount; subsequent polls do not re-collapse.
+  // 数据首次到达后，折叠除最新 session 外的所有组（groups[0] 是最新，因为按 newestMtime desc 排序）。
+  // Once data first arrives, collapse every group except the newest (groups[0] is newest because of desc sort).
+  const didInit = useRef(false);
   useEffect(() => {
+    if (didInit.current || groups.length === 0) return;
+    didInit.current = true;
     setCollapsedKeys(new Set(groups.slice(1).map((g) => g.key)));
-  }, []);
+  }, [groups]);
 
   const toggle = (key: string) => {
     setCollapsedKeys((prev) => {
