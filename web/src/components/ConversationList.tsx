@@ -58,6 +58,7 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
             onToggle={toggle}
             onSelect={onSelect}
             vStart={vRow.start}
+            vIndex={vRow.index}
             measureRef={virtualizer.measureElement}
           />
         ))}
@@ -73,6 +74,7 @@ interface TreeNodeRowProps {
   onToggle: (key: string) => void;
   onSelect: (name: string) => void;
   vStart: number;
+  vIndex: number;
   measureRef: (el: HTMLElement | null) => void;
 }
 
@@ -83,6 +85,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
   onToggle,
   onSelect,
   vStart,
+  vIndex,
   measureRef,
 }: TreeNodeRowProps) {
   const style: React.CSSProperties = {
@@ -104,7 +107,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
         className="session-header"
         style={style}
         onClick={() => onToggle(node.key)}
-        data-index={node.key}
+        data-index={vIndex}
       >
         <span className="caret">{collapsed ? "▸" : "▾"}</span>
         <span className="session-key">{node.name}</span>
@@ -122,7 +125,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
       className={`file-item${isActive ? " active" : ""}`}
       style={style}
       onClick={() => onSelect(it.name)}
-      data-index={node.key}
+      data-index={vIndex}
     >
       <div className="preview">{it.preview}</div>
       <div className="meta">
