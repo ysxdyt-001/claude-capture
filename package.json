@@ -29,10 +29,13 @@
     "proxy",
     "inspector"
   ],
+  "scripts": {
+    "prepublishOnly": "cd web && npm ci && npm run build"
+  },
   "files": [
     "bin",
     "lib",
-    "public",
+    "dist",
     "README.md"
   ]
 }
