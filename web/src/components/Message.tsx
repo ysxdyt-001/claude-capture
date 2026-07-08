@@ -74,10 +74,15 @@ export default function Message({ message, idx, blocks }: MessageProps) {
     const source = blocks ?? (message.content as ContentBlock[]);
     for (const b of source) {
       if (b.type === "thinking") {
-        // thinking handled by component below in assistant rendering path
-        bodyBlocks.html += `<div class="msg-thinking">${escapeHtml(
-          (b as { thinking?: string }).thinking || "",
-        )}</div>`;
+        // Collapsible <details> — faithful port of vanilla renderThinkingBlock.
+        const text = (b as { thinking?: string }).thinking || "";
+        const words = (text.match(/\S+/g) || []).length;
+        if (words) {
+          bodyBlocks.html += `<details class="thinking-block">
+    <summary><span class="msg-role">thinking · ${words} words</span></summary>
+    <div class="msg-thinking">${escapeHtml(text)}</div>
+  </details>`;
+        }
       } else if (b.type === "text") {
         bodyBlocks.html += `<div class="msg-text">${smartRender(
           (b as { text?: string }).text || "",
