@@ -1189,3 +1189,63 @@ details summary:hover {
   background: rgba(90, 125, 82, 0.18);
   color: var(--text);
 }
+
+/* ============ SESSION TREE SIDEBAR ============ */
+.session-group {
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 24px 8px;
+  cursor: pointer;
+  border: none;
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--paper-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.session-header:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.session-header .caret {
+  color: var(--sage-bright);
+  font-size: 11px;
+  display: inline-block;
+  width: 10px;
+}
+.session-header .session-time {
+  color: var(--sage-deep);
+  font-weight: 500;
+}
+.session-header .session-count {
+  padding: 1px 7px;
+  background: var(--sage-dim);
+  border: 1px solid rgba(90, 125, 82, 0.2);
+  color: var(--sage-deep);
+  border-radius: 10px;
+  font-size: 9.5px;
+}
+.session-header .session-preview {
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-style: italic;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  text-align: right;
+}
