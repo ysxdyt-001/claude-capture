@@ -41,7 +41,9 @@ export default function App() {
     return () => clearInterval(id);
   }, [load]);
 
-  const onSelect = async (name: string) => {
+  // useCallback 保证 onSelect 引用稳定，让 ConversationList → TreeNodeRow 的 memo() 生效。
+  // useCallback keeps onSelect's identity stable so ConversationList → TreeNodeRow's memo() actually works.
+  const onSelect = useCallback(async (name: string) => {
     setSelectedName(name);
     try {
       const data = await fetchFile(name);
@@ -49,7 +51,7 @@ export default function App() {
     } catch {
       setCapture(null);
     }
-  };
+  }, []);
 
   return (
     <div className="app" style={{ gridTemplateColumns: `${sidebarWidth}px 4px 1fr` }}>

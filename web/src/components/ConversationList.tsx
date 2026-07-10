@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatTime } from "../lib/format";
 import { type TreeNode, buildTree, flattenVisible } from "../lib/groupSessions";
 import type { ListItem } from "../types";
@@ -36,14 +36,16 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
   const visibleRowsRef = useRef(visibleRows);
   visibleRowsRef.current = visibleRows;
 
-  const toggle = (key: string) => {
+  // useCallback 保证 toggle 引用稳定，让 TreeNodeRow 的 memo() 生效。
+  // useCallback keeps toggle's identity stable so TreeNodeRow's memo() actually works.
+  const toggle = useCallback((key: string) => {
     setCollapsedKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  };
+  }, []);
 
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({

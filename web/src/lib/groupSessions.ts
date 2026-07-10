@@ -52,6 +52,12 @@ export function buildTree(items: ListItem[]): TreeNode[] {
   return sessions;
 }
 
+// 模块级叶子缓存：相同 ListItem.name 且 ListItem 引用未变 → 复用同一个 TreeNode 对象。
+// 下游 TreeNodeRow 的 memo() 依赖这个引用稳定性来跳过未变行的重渲染。
+// Module-level leaf cache: same ListItem.name AND same ListItem reference → reuse the same TreeNode object.
+// Downstream TreeNodeRow's memo() relies on this identity stability to skip re-rendering unchanged rows.
+const leafCache = new Map<string, TreeNode>();
+
 // 把树展平成可见行的数组：跳过被折叠 session 的子节点。
 // Flatten the tree into the visible-rows array: skip children of collapsed sessions.
 // 今天子节点都是叶子；未来嵌套路径需要把内层循环改成递归遍历。
@@ -62,7 +68,14 @@ export function flattenVisible(tree: TreeNode[], collapsedKeys: Set<string>): Tr
     out.push(node);
     if (node.type === "session" && !collapsedKeys.has(node.key) && node.captures) {
       for (const c of node.captures) {
-        out.push({ type: "leaf", depth: node.depth + 1, key: c.name, name: c.name, item: c });
+        let leaf = leafCache.get(c.name);
+        // 只有当 ListItem 引用变了才重建 wrapper；否则复用上次的 TreeNode 对象。
+        // Rebuild the wrapper only when the ListItem reference changed; otherwise reuse the previous TreeNode.
+        if (!leaf || leaf.item !== c) {
+          leaf = { type: "leaf", depth: node.depth + 1, key: c.name, name: c.name, item: c };
+          leafCache.set(c.name, leaf);
+        }
+        out.push(leaf);
       }
     }
   }
