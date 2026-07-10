@@ -431,9 +431,55 @@ h3.section {
 }
 h3.section::after {
   content: "";
-  flex: 1;
+  width: 40px;
   height: 1px;
   background: linear-gradient(90deg, var(--line-2), transparent);
+}
+
+/* ============ CONVERSATION FILTER CHIPS ============ */
+.conv-title {
+  /* 标题文本不拉伸，让 .conv-filter 推到最右。 */
+  /* Title text doesn't grow; lets .conv-filter park at the right edge. */
+  flex: none;
+}
+.conv-filter {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.conv-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 3px 9px;
+  border-radius: 10px;
+  cursor: pointer;
+  background: var(--sage-dim);
+  color: var(--sage-deep);
+  border: 1px solid rgba(90, 125, 82, 0.25);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.conv-chip:hover {
+  border-color: var(--sage-bright);
+}
+.conv-chip.off {
+  background: transparent;
+  color: var(--text-faint);
+  border-color: var(--line);
+}
+.conv-chip.off:hover {
+  color: var(--text-dim);
+  border-color: var(--line-2);
+}
+.conv-empty {
+  color: var(--text-faint);
+  text-align: center;
+  padding: 60px 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 
 .msg {
