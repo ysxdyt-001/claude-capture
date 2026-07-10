@@ -114,10 +114,16 @@ export function highlightShell(src: string): string {
     // Single-char operators.
     if ("|;()<>&".includes(c)) {
       out.push(span("sh-op", c));
-      // 仅在 ; 后换行；管道 | 保持同行。
-      // Break only after ; ; keep pipelines (|) on one line.
-      if (c === ";") out.push("\n");
       i++;
+      // 仅在 ; 后换行；管道 | 保持同行。换行时吃掉 ; 后的一个空格，
+      // 否则它会变成下一行的前导空格，让后续行比首行多缩进一格。
+      // Break only after ; ; keep pipelines (|) on one line. Consume the
+      // single space after ; so it doesn't become a leading space on the
+      // next row and misalign it from the first row.
+      if (c === ";") {
+        out.push("\n");
+        if (src[i] === " ") i++;
+      }
       continue;
     }
 
