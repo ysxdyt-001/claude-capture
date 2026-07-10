@@ -1,5 +1,5 @@
 import { escapeHtml } from "../lib/format";
-import { highlightJSON } from "../lib/json";
+import { renderToolInput } from "../lib/toolInput";
 import type { ToolResultBlock, ToolUseBlock } from "../types";
 import ToolResult from "./ToolResult";
 
@@ -9,14 +9,10 @@ interface ToolPairProps {
 }
 
 export default function ToolPair({ toolUse, toolResult }: ToolPairProps) {
-  const input = toolUse.input ?? {};
-  const inputJson = JSON.stringify(input, null, 2);
-  const isCompact = !inputJson.includes("\n") && inputJson.length <= 80;
-  const inputInner = isCompact ? (
-    <code className="j-inline" dangerouslySetInnerHTML={{ __html: highlightJSON(inputJson) }} />
-  ) : (
-    <pre className="j-block flat" dangerouslySetInnerHTML={{ __html: highlightJSON(inputJson) }} />
-  );
+  // 工具输入按字段递归渲染：allowlist 中的散文字段走 markdown，其余保持 JSON/内联。
+  // Tool input renders recursively: prose fields in the allowlist go through
+  // markdown; structural fields stay as JSON or inline code.
+  const inputHtml = renderToolInput(toolUse.input ?? {});
 
   return (
     <div className="tool-pair">
@@ -30,7 +26,10 @@ export default function ToolPair({ toolUse, toolResult }: ToolPairProps) {
           dangerouslySetInnerHTML={{ __html: escapeHtml(toolUse.id || "") }}
         />
       </div>
-      <div className="tool-pair-input">{inputInner}</div>
+      <div
+        className="tool-pair-input"
+        dangerouslySetInnerHTML={{ __html: inputHtml }}
+      />
       {toolResult && <ToolResult toolResult={toolResult} variant="pair" />}
     </div>
   );
