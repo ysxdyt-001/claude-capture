@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { buildConversationItems } from "../lib/conversation";
 import { rebuildAssistantFromSSE } from "../lib/sse";
 import type { Capture, Message as MessageType } from "../types";
@@ -6,6 +7,26 @@ import ToolPair from "./ToolPair";
 
 interface ConversationTabProps {
   capture: Capture;
+}
+
+// 过滤桶：每种会话项映射到一个桶（other 无桶，始终可见）。
+// Filter buckets: each conversation item maps to a bucket. "other" has no
+// bucket and is always visible since it has no chip to toggle it.
+type Bucket = "system" | "user" | "assistant" | "tool";
+
+function bucketOf(item: { kind: string }): Bucket | null {
+  switch (item.kind) {
+    case "system":
+      return "system";
+    case "user":
+      return "user";
+    case "assistant":
+      return "assistant";
+    case "tool-pair":
+      return "tool";
+    default:
+      return null;
+  }
 }
 
 export default function ConversationTab({ capture }: ConversationTabProps) {
@@ -46,6 +67,31 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
   const items = buildConversationItems(all);
   const toolPairCount = items.filter((i) => i.kind === "tool-pair").length;
   const textTurnCount = items.filter((i) => i.kind !== "tool-pair" && i.kind !== "system").length;
+
+  // 过滤状态：默认全部开启。useState 保留在同一组件实例内，切换抓包时不重置。
+  // Filter state: all on by default. Held in useState so switching captures
+  // (same component instance) does not reset the chosen filters.
+  const [filter, setFilter] = useState<Record<Bucket, boolean>>({
+    system: true,
+    user: true,
+    assistant: true,
+    tool: true,
+  });
+  const toggle = (b: Bucket) =>
+    setFilter((prev) => ({ ...prev, [b]: !prev[b] }));
+
+  // 每个桶的总数（与过滤状态无关，固定描述本次抓包）。
+  // Per-bucket totals (independent of filter state; describe this capture).
+  const counts: Record<Bucket, number> = {
+    system: items.filter((it) => it.kind === "system").length,
+    user: items.filter((it) => it.kind === "user").length,
+    assistant: items.filter((it) => it.kind === "assistant").length,
+    tool: toolPairCount,
+  };
+
+  const visibleItems = items.filter(
+    (it) => bucketOf(it) === null || filter[bucketOf(it) as Bucket],
+  );
   const status = capture.response?.status_code;
   const statusBadgeCls = status === 200 ? "ok" : "err";
 
@@ -79,24 +125,43 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
       </div>
 
       <h3 className="section">
-        Conversation · {textTurnCount} turns
-        {toolPairCount ? ` · ${toolPairCount} tool calls` : ""}
+        <span className="conv-title">
+          Conversation · {textTurnCount} turns
+          {toolPairCount ? ` · ${toolPairCount} tool calls` : ""}
+        </span>
+        <div className="conv-filter">
+          {(["system", "user", "assistant", "tool"] as Bucket[]).map((b) => (
+            <button
+              key={b}
+              type="button"
+              aria-pressed={filter[b]}
+              className={`conv-chip${filter[b] ? "" : " off"}`}
+              onClick={() => toggle(b)}
+            >
+              {b} · {counts[b]}
+            </button>
+          ))}
+        </div>
       </h3>
 
-      {items.map((it, i) => {
-        switch (it.kind) {
-          case "system":
-            return <SystemMessage key={i} message={it.message} />;
-          case "user":
-            return <Message key={i} message={it.message} idx={it.idx} />;
-          case "assistant":
-            return <Message key={i} message={it.message} idx={it.idx} blocks={it.blocks} />;
-          case "tool-pair":
-            return <ToolPair key={i} toolUse={it.toolUse} toolResult={it.toolResult} />;
-          default:
-            return <Message key={i} message={it.message} idx={it.idx} />;
-        }
-      })}
+      {visibleItems.length === 0 ? (
+        <div className="conv-empty">all types hidden — toggle a filter to show items</div>
+      ) : (
+        visibleItems.map((it, i) => {
+          switch (it.kind) {
+            case "system":
+              return <SystemMessage key={i} message={it.message} />;
+            case "user":
+              return <Message key={i} message={it.message} idx={it.idx} />;
+            case "assistant":
+              return <Message key={i} message={it.message} idx={it.idx} blocks={it.blocks} />;
+            case "tool-pair":
+              return <ToolPair key={i} toolUse={it.toolUse} toolResult={it.toolResult} />;
+            default:
+              return <Message key={i} message={it.message} idx={it.idx} />;
+          }
+        })
+      )}
     </div>
   );
 }
