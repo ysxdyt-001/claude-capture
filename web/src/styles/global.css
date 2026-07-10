@@ -1107,6 +1107,39 @@ code.j-inline {
   color: var(--text-faint);
 }
 
+/* ============ SHELL BLOCKS (Bash command highlighting) ============ */
+pre.sh-block {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+.sh-comment {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.sh-str {
+  color: var(--clay);
+}
+.sh-op {
+  color: var(--text-dim);
+}
+.sh-kw {
+  color: var(--plum);
+  font-weight: 500;
+}
+.sh-var {
+  color: var(--honey);
+}
+
 .seg-image {
   padding: 8px 12px;
   font-family: var(--font-mono);

@@ -1,6 +1,7 @@
 import { escapeHtml } from "./format";
 import { highlightJSON } from "./json";
 import { smartRender } from "./markdown";
+import { highlightShell } from "./shell";
 
 // 允许渲染为 markdown 的"散文型"字段名。按键名匹配，跨工具通用。
 // Prose-shaped field names allowed to render as markdown. Matched by leaf
@@ -21,6 +22,11 @@ export const MARKDOWN_FIELDS = new Set([
   "notes",
 ]);
 
+// 按 shell 语法高亮的字段名（命令/脚本）。优先级高于 markdown 与 JSON。
+// Field names highlighted as shell syntax (commands/scripts). Checked before
+// the markdown and JSON branches in renderScalar.
+export const SHELL_FIELDS = new Set(["command", "script", "cmd", "shell"]);
+
 // 判断字符串是否含有 markdown 信号：换行、标题、强调、代码、列表、引用、表格。
 // Detect markdown signals so we only invoke the markdown renderer when relevant.
 function hasMarkdownSignal(s: string): boolean {
@@ -38,6 +44,12 @@ function hasMarkdownSignal(s: string): boolean {
 }
 
 function renderScalar(value: string, keyHint?: string): string {
+  // shell 命令字段 → 走 highlightShell，保留真实换行与语法高亮。
+  // Shell command fields → highlightShell, preserving real newlines and
+  // syntax highlighting instead of JSON-escaping into one quoted line.
+  if (keyHint && SHELL_FIELDS.has(keyHint)) {
+    return `<pre class="sh-block">${highlightShell(value)}</pre>`;
+  }
   // allowlist 命中且含 markdown 信号 → 走 smartRender（内部自动 JSON/markdown 分流）。
   // Allowlist hit with markdown signals → smartRender (auto JSON/markdown split).
   if (keyHint && MARKDOWN_FIELDS.has(keyHint) && hasMarkdownSignal(value)) {
