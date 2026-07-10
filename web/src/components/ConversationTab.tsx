@@ -129,7 +129,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
           Conversation · {textTurnCount} turns
           {toolPairCount ? ` · ${toolPairCount} tool calls` : ""}
         </span>
-        <div className="conv-filter">
+        <div className="conv-filter" role="group" aria-label="Filter by type">
           {(["system", "user", "assistant", "tool"] as Bucket[]).map((b) => (
             <button
               key={b}
