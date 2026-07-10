@@ -106,6 +106,10 @@ export function highlightShell(src: string): string {
       two === "<>"
     ) {
       out.push(span("sh-op", two));
+      // 链式运算符后换行，让复合命令每段独占一行，便于阅读。
+      // Break after chain operators so each segment of a compound command
+      // sits on its own row.
+      if (two === "&&" || two === "||") out.push("\n");
       i += 2;
       continue;
     }
@@ -114,6 +118,9 @@ export function highlightShell(src: string): string {
     // Single-char operators.
     if ("|;()<>&".includes(c)) {
       out.push(span("sh-op", c));
+      // 同上：管道 ; 与 | 后换行。
+      // Same: break after ; and | .
+      if (c === ";" || c === "|") out.push("\n");
       i++;
       continue;
     }
