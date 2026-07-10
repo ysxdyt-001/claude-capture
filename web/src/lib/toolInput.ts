@@ -1,0 +1,99 @@
+import { escapeHtml } from "./format";
+import { highlightJSON } from "./json";
+import { smartRender } from "./markdown";
+
+// 允许渲染为 markdown 的"散文型"字段名。按键名匹配，跨工具通用。
+// Prose-shaped field names allowed to render as markdown. Matched by leaf
+// key name so the rule generalizes across tools without per-tool config.
+export const MARKDOWN_FIELDS = new Set([
+  "description",
+  "preview",
+  "subject",
+  "question",
+  "reason",
+  "comment",
+  "message",
+  "prompt",
+  "summary",
+  "body",
+  "explanation",
+  "note",
+  "notes",
+]);
+
+// 判断字符串是否含有 markdown 信号：换行、标题、强调、代码、列表、引用、表格。
+// Detect markdown signals so we only invoke the markdown renderer when relevant.
+function hasMarkdownSignal(s: string): boolean {
+  return (
+    s.includes("\n") ||
+    /(^|\s)#{1,6}\s/.test(s) ||
+    /(^|\s)\*[^*\n]/.test(s) ||
+    /(^|\s)_[^_\n]/.test(s) ||
+    s.includes("`") ||
+    /(^|\s)[-*+]\s/.test(s) ||
+    /^>\s?/.test(s) ||
+    s.includes("|") ||
+    s.length > 80
+  );
+}
+
+function renderScalar(value: string, keyHint?: string): string {
+  // allowlist 命中且含 markdown 信号 → 走 smartRender（内部自动 JSON/markdown 分流）。
+  // Allowlist hit with markdown signals → smartRender (auto JSON/markdown split).
+  if (keyHint && MARKDOWN_FIELDS.has(keyHint) && hasMarkdownSignal(value)) {
+    return `<div class="msg-text">${smartRender(value)}</div>`;
+  }
+  // 短的单行字符串 → 内联 code；长或多行 → JSON 块（保留转义）。
+  // Short single-line strings render inline; long/multiline stay as JSON blocks.
+  if (!value.includes("\n") && value.length <= 80) {
+    return `<code class="j-inline">${escapeHtml(value)}</code>`;
+  }
+  const json = JSON.stringify(value, null, 2);
+  return `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(json)}</pre></div>`;
+}
+
+// 递归渲染工具输入。object → 字段行；array → 元素卡片；标量 → 内联或 markdown。
+// Recursively render a tool input. object → field rows; array → element cards;
+// scalars → inline or markdown depending on allowlist + signals.
+export function renderToolInput(value: unknown, keyHint?: string): string {
+  if (value == null) {
+    return `<code class="j-inline">${escapeHtml(String(value))}</code>`;
+  }
+  if (typeof value === "string") {
+    return renderScalar(value, keyHint);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return `<code class="j-inline">${highlightJSON(JSON.stringify(value))}</code>`;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return `<code class="j-inline">[]</code>`;
+    }
+    const items = value
+      .map((el, i) => {
+        const inner = renderToolInput(el, "");
+        // 元素是对象时编号成卡片，便于阅读嵌套 description / preview。
+        // Number object elements as cards so nested prose surfaces cleanly.
+        if (el && typeof el === "object" && !Array.isArray(el)) {
+          return `<div class="input-row"><div class="input-key">#${i + 1}</div><div class="input-val">${inner}</div></div>`;
+        }
+        return `<div class="input-val">${inner}</div>`;
+      })
+      .join("");
+    return `<div class="input-array">${items}</div>`;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) {
+      return `<code class="j-inline">{}</code>`;
+    }
+    const rows = entries
+      .map(([k, v]) => {
+        const inner = renderToolInput(v, k);
+        return `<div class="input-row"><div class="input-key">${escapeHtml(k)}</div><div class="input-val">${inner}</div></div>`;
+      })
+      .join("");
+    return `<div class="input-obj">${rows}</div>`;
+  }
+  return `<code class="j-inline">${escapeHtml(String(value))}</code>`;
+}
