@@ -30,7 +30,7 @@ export default function ToolPair({ toolUse, toolResult }: ToolPairProps) {
         className="tool-pair-input"
         dangerouslySetInnerHTML={{ __html: inputHtml }}
       />
-      {toolResult && <ToolResult toolResult={toolResult} variant="pair" />}
+      {toolResult && <ToolResult toolResult={toolResult} variant="pair" toolUse={toolUse} />}
     </div>
   );
 }

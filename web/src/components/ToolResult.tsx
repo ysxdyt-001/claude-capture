@@ -1,12 +1,17 @@
+import { renderCodeFile } from "../lib/code";
 import { escapeHtml } from "../lib/format";
 import { highlightJSON } from "../lib/json";
 import { smartRender } from "../lib/markdown";
-import type { ToolResultBlock, ToolResultContent } from "../types";
+import type { ToolResultBlock, ToolResultContent, ToolUseBlock } from "../types";
 import CollapseWrap from "./CollapseWrap";
 
 interface ToolResultProps {
   toolResult: ToolResultBlock;
   variant: "standalone" | "pair";
+  // 配对的 tool_use（仅 pair 变体有）。用于按工具类型选择渲染策略，例如 Read 结果走代码高亮。
+  // Paired tool_use (pair variant only). Drives per-tool rendering, e.g.
+  // routing Read results through the code highlighter.
+  toolUse?: ToolUseBlock;
 }
 
 function renderContentSegments(c: ToolResultBlock["content"]): string {
@@ -35,9 +40,23 @@ function renderContentSegments(c: ToolResultBlock["content"]): string {
   return `<div class="msg-text">${escapeHtml(String(c ?? ""))}</div>`;
 }
 
-export default function ToolResult({ toolResult, variant }: ToolResultProps) {
+// 根据工具类型挑选结果正文 HTML。Read 返回带行号的文件内容 → 走 renderCodeFile；
+// 其余（以及 renderCodeFile 不识别的文件类型）回退到 renderContentSegments。
+// Pick the result body HTML by tool kind. Read returns line-numbered file
+// content → renderCodeFile; everything else (and unrecognized file types)
+// falls back to renderContentSegments.
+function renderToolResultBody(toolResult: ToolResultBlock, toolUse?: ToolUseBlock): string {
+  if (toolUse && toolUse.name === "Read" && typeof toolResult.content === "string") {
+    const input = (toolUse.input ?? {}) as { file_path?: string };
+    const codeHtml = renderCodeFile(toolResult.content, input.file_path);
+    if (codeHtml) return codeHtml;
+  }
+  return renderContentSegments(toolResult.content);
+}
+
+export default function ToolResult({ toolResult, variant, toolUse }: ToolResultProps) {
   const isErr = !!toolResult.is_error;
-  const bodyHtml = renderContentSegments(toolResult.content);
+  const bodyHtml = renderToolResultBody(toolResult, toolUse);
   const lineGuess = (bodyHtml.match(/\n/g) || []).length;
   const shouldCollapse = bodyHtml.length > 1000 || lineGuess > 12;
 
