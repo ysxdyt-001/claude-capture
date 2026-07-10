@@ -28,6 +28,14 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
 
   const visibleRows = useMemo(() => flattenVisible(tree, collapsedKeys), [tree, collapsedKeys]);
 
+  // 把最新 visibleRows 放进 ref：measureElement 的 ResizeObserver 是异步回调，
+  // 触发时 visibleRows 可能已变（轮询/折叠），需要读到最新数组才能正确映射 key。
+  // Mirror visibleRows into a ref: measureElement's ResizeObserver fires async,
+  // by which time visibleRows may have changed (poll/collapse). It must read the
+  // latest array to map the DOM element back to the correct key.
+  const visibleRowsRef = useRef(visibleRows);
+  visibleRowsRef.current = visibleRows;
+
   const toggle = (key: string) => {
     setCollapsedKeys((prev) => {
       const next = new Set(prev);
@@ -43,7 +51,10 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
     getScrollElement: () => parentRef.current,
     estimateSize: () => 60,
     overscan: 8,
-    getItemKey: (i) => visibleRows[i].key,
+    getItemKey: (i) => {
+      const row = visibleRowsRef.current[i];
+      return row ? row.key : `__gap_${i}`;
+    },
   });
 
   return (
