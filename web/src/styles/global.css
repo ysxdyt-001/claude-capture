@@ -909,6 +909,61 @@ details.thinking-block .msg-thinking {
   border: none;
   border-radius: 0;
 }
+/* ============ TOOL-INPUT FIELD ROWS ============ */
+.tool-pair-input .input-obj,
+.tool-call .tool-input .input-obj {
+  display: flex;
+  flex-direction: column;
+}
+.tool-pair-input .input-row,
+.tool-call .tool-input .input-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line-faint);
+  align-items: start;
+}
+.tool-pair-input .input-row:last-child,
+.tool-call .tool-input .input-row:last-child {
+  border-bottom: none;
+}
+.tool-pair-input .input-key,
+.tool-call .tool-input .input-key {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--text-faint);
+  padding-top: 2px;
+}
+.tool-pair-input .input-val,
+.tool-call .tool-input .input-val {
+  min-width: 0;
+}
+.tool-pair-input .input-array,
+.tool-call .tool-input .input-array {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tool-pair-input .input-array .input-row,
+.tool-call .tool-input .input-array .input-row {
+  background: var(--paper-2);
+  border: 1px solid var(--line-faint);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+/* markdown 块在工具输入里字号略小，贴合周围信息密度。 */
+/* Markdown blocks inside tool inputs render slightly smaller to match density. */
+.tool-pair-input .msg-text,
+.tool-call .tool-input .msg-text {
+  font-size: 12.5px;
+}
+.tool-pair-input .msg-text .md-p:last-child,
+.tool-call .tool-input .msg-text .md-p:last-child {
+  margin-bottom: 0;
+}
 .tool-pair-result {
   padding: 0;
 }
