@@ -55,13 +55,13 @@ function renderScalar(value: string, keyHint?: string): string {
   if (keyHint && MARKDOWN_FIELDS.has(keyHint) && hasMarkdownSignal(value)) {
     return `<div class="msg-text">${smartRender(value)}</div>`;
   }
-  // 短的单行字符串 → 内联 code；长或多行 → JSON 块（保留转义）。
-  // Short single-line strings render inline; long/multiline stay as JSON blocks.
+  // 短的单行字符串 → 内联 code；长或多行 → <pre> 中保留真实换行（仅转义，不 JSON 化）。
+  // Short single-line strings render inline; long/multiline render in a <pre>
+  // with real newlines preserved (escaped, not JSON-escaped into "\n").
   if (!value.includes("\n") && value.length <= 80) {
     return `<code class="j-inline">${escapeHtml(value)}</code>`;
   }
-  const json = JSON.stringify(value, null, 2);
-  return `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(json)}</pre></div>`;
+  return `<div class="j-block-wrap"><pre class="j-block">${escapeHtml(value)}</pre></div>`;
 }
 
 // 递归渲染工具输入。object → 字段行；array → 元素卡片；标量 → 内联或 markdown。
