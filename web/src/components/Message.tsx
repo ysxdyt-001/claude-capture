@@ -4,6 +4,7 @@ import { smartRender } from "../lib/markdown";
 import type { ContentBlock, Message as MessageType } from "../types";
 import type { ToolResultBlock, ToolUseBlock } from "../types";
 import ToolResult from "./ToolResult";
+import { renderToolInput } from "../lib/toolInput";
 
 interface MessageProps {
   message: MessageType;
@@ -25,19 +26,16 @@ function renderBlockHtml(b: ContentBlock, _role: string): string {
     )}</div>`;
   }
   if (b.type === "tool_use") {
+    // 孤儿 tool_use（未配对进 ToolPair）也走结构化渲染，保持视觉一致。
+    // Orphan tool_use blocks (not paired into ToolPair) reuse the same
+    // structured renderer so prose fields stay consistent across views.
     const tu = b as ToolUseBlock;
-    const input = tu.input ?? {};
-    const inputJson = JSON.stringify(input, null, 2);
-    const isCompact = !inputJson.includes("\n") && inputJson.length <= 80;
-    const inputHtml = isCompact
-      ? `<code class="j-inline">${highlightJSON(inputJson)}</code>`
-      : `<div class="j-block-wrap"><pre class="j-block">${highlightJSON(inputJson)}</pre></div>`;
     return `<div class="tool-call">
       <div class="tool-head">
         <span class="name">${escapeHtml(tu.name || "")}</span>
         <span class="tool-id">${escapeHtml(tu.id || "")}</span>
       </div>
-      <div class="tool-input">${inputHtml}</div>
+      <div class="tool-input">${renderToolInput(tu.input ?? {})}</div>
     </div>`;
   }
   if (b.type === "tool_result") {
