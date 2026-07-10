@@ -124,7 +124,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
         </div>
       </div>
 
-      <h3 className="section">
+      <h3 className="section conv-header">
         <span className="conv-title">
           Conversation · {textTurnCount} turns
           {toolPairCount ? ` · ${toolPairCount} tool calls` : ""}

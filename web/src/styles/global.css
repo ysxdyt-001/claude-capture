@@ -431,9 +431,16 @@ h3.section {
 }
 h3.section::after {
   content: "";
-  width: 40px;
+  flex: 1;
   height: 1px;
   background: linear-gradient(90deg, var(--line-2), transparent);
+}
+/* 仅会话标签页的标题需要短 accent，让过滤芯片停在右侧。 */
+/* Only the Conversation tab header uses a short accent so the filter
+   chips can park at the right edge; other section headers keep the
+   full-width gradient line. */
+h3.section.conv-header::after {
+  flex: 0 0 40px;
 }
 
 /* ============ CONVERSATION FILTER CHIPS ============ */
