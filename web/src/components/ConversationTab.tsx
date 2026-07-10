@@ -18,7 +18,20 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
   // Build the chronological thread: system → request messages → SSE reply.
   const all: MessageType[] = [];
   if (req.system) {
-    const sys = typeof req.system === "string" ? req.system : JSON.stringify(req.system, null, 2);
+    // system 可能是字符串，也可能是 {type:"text", text:"..."} 块数组。
+    // 数组情形下抽出各块 .text 并拼接，保证后续按 markdown 渲染而非 JSON 转储。
+    // system may be a string or an array of {type:"text", text:"..."} blocks.
+    // For arrays, pull out each block's .text and join so it renders as markdown,
+    // not as an escaped JSON dump.
+    const sys =
+      typeof req.system === "string"
+        ? req.system
+        : Array.isArray(req.system)
+          ? (req.system as Array<{ text?: string }>)
+              .map((b) => b?.text ?? "")
+              .filter(Boolean)
+              .join("\n\n")
+          : JSON.stringify(req.system, null, 2);
     all.push({ role: "system", content: sys });
   }
   for (const m of messages) all.push(m);
