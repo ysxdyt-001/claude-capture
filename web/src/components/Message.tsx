@@ -21,7 +21,7 @@ function renderBlockHtml(b: ContentBlock, _role: string): string {
     return smartRender((b as { text?: string }).text || "");
   }
   if (b.type === "thinking") {
-    return `<div class="msg-thinking">${escapeHtml(
+    return `<div class="msg-thinking">${smartRender(
       (b as { thinking?: string }).thinking || "",
     )}</div>`;
   }
@@ -78,7 +78,7 @@ export default function Message({ message, idx, blocks }: MessageProps) {
         if (words) {
           bodyBlocks.html += `<details class="thinking-block">
     <summary><span class="msg-role">thinking · ${words} words</span></summary>
-    <div class="msg-thinking">${escapeHtml(text)}</div>
+    <div class="msg-thinking">${smartRender(text)}</div>
   </details>`;
         }
       } else if (b.type === "text") {
