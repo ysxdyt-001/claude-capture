@@ -116,5 +116,7 @@ export interface ListItem {
   status?: number;
   preview: string;
   tag?: string; // "main" | "subagent" | "explore" | "utility" | "unknown"
-  kind?: "anchor" | "continuation";
+  kind?: "anchor" | "continuation" | "compressed";
+  parentId?: string; // main-agent capture filename that dispatched this subagent; absent = top-level
+  messageCount?: number; // server-internal, used for compression detection; not rendered
 }
