@@ -115,4 +115,5 @@ export interface ListItem {
   size: number;
   status?: number;
   preview: string;
+  tag?: string; // "main" | "subagent" | "explore" | "utility" | "unknown"
 }

@@ -132,6 +132,16 @@ const TreeNodeRow = memo(function TreeNodeRow({
   const it = node.item!;
   const badgeCls = it.status === 200 ? "ok" : it.status ? "err" : "neutral";
   const isActive = it.name === selectedName;
+  // 主代理行不显示标签（占多数，全标会变成噪声）；只标子代理 / Explore / 工具调用。
+  // Main-agent rows get no pill (they're the majority — tagging all rows is noise).
+  const tagPill = (() => {
+    switch (it.tag) {
+      case "subagent": return <span className="tag tag-sub">Sub</span>;
+      case "explore":  return <span className="tag tag-explore">Explore</span>;
+      case "utility":  return <span className="tag tag-util">Util</span>;
+      default:         return null;
+    }
+  })();
   return (
     <div
       ref={measureRef}
@@ -140,7 +150,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
       onClick={() => onSelect(it.name)}
       data-index={vIndex}
     >
-      <div className="preview">{it.preview}</div>
+      <div className="preview">{tagPill}{it.preview}</div>
       <div className="meta">
         <span className={`badge ${badgeCls}`}>{it.status || "—"}</span>
         <span>{formatTime(it.mtime)}</span>

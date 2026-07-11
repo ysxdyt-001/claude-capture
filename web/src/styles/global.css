@@ -250,6 +250,38 @@ body::after {
   border-color: var(--line);
 }
 
+/* 标签药丸 —— 标记子代理 / Explore / 工具调用请求。尺寸与 .badge 对齐。 */
+/* Tag pills — mark subagent / explore / utility requests. Sized to match .badge. */
+.tag {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-size: 9.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.tag-sub {
+  background: rgba(122, 95, 168, 0.12);
+  color: #5b4180;
+  border-color: rgba(122, 95, 168, 0.28);
+}
+.tag-explore {
+  background: var(--sage-dim);
+  color: var(--sage-deep);
+  border-color: rgba(90, 125, 82, 0.25);
+}
+.tag-util {
+  background: var(--elevated);
+  color: var(--text-dim);
+  border-color: var(--line);
+}
+
 /* ============ MAIN ============ */
 .main {
   display: flex;
