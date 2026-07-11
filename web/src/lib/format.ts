@@ -25,7 +25,9 @@ export function unescapeHtml(s: string): string {
 export function formatTime(ms?: number): string {
   if (!ms) return "—";
   const d = new Date(ms);
-  return d.toLocaleTimeString("zh-CN", { hour12: false });
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const time = d.toLocaleTimeString("zh-CN", { hour12: false });
+  return `${date} ${time}`;
 }
 
 // 相对时间：5 分钟前 / 3 小时前 / 昨天 / 3 天前。超过 7 天回退为绝对时间 MM-DD HH:mm。
