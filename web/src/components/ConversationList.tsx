@@ -102,6 +102,7 @@ const RequestRow = memo(function RequestRow({
         <span className="req-tokens">
           {fmtTokens(item.inputTokens)} → {fmtTokens(item.outputTokens)}
         </span>
+        <span>{(item.size / 1024).toFixed(1)}k</span>
         <span>{formatTime(item.mtime)}</span>
       </div>
     </div>
