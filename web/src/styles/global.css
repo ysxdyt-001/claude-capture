@@ -313,6 +313,31 @@ body::after {
   font-style: italic;
 }
 
+/* 压缩边界分隔条 —— 非交互的视觉缝隙，仅出现在 compressed turn 之前。*/
+/* Compression-boundary divider — a non-interactive visual seam that appears only
+   before a compressed turn. */
+.sidebar-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  pointer-events: none; /* 非交互 —— 不阻挡下层点击 / non-interactive — doesn't block clicks */
+}
+.sidebar-divider .divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line-faint);
+}
+.sidebar-divider .divider-label {
+  flex-shrink: 0;
+  text-transform: lowercase;
+}
+
 .badge {
   padding: 2px 8px;
   border-radius: 10px;

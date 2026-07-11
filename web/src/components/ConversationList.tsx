@@ -49,25 +49,59 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
       const next = new Set(prev);
       for (const session of tree) {
         if (session.type !== "session") continue;
-        let inThisSession = false;
+        // 收集本 session 里所有需要展开的 key（session / 顶层对话 / 嵌套对话 / utility）。
+        // Collect every key in this session that needs expanding.
+        const keysToOpen = new Set<string>();
+        // 顶层对话 + 嵌套对话。
+        // Top-level + nested conversations.
         for (const conv of session.conversations) {
-          const hit =
+          const hitTop =
             conv.anchorItem.name === selectedName ||
             conv.turns.some((t) => t.name === selectedName);
-          if (hit) {
-            inThisSession = true;
-            if (next.has(session.key)) { next.delete(session.key); changed = true; }
-            if (next.has(conv.key)) { next.delete(conv.key); changed = true; }
+          if (hitTop) {
+            keysToOpen.add(session.key);
+            keysToOpen.add(conv.key);
           }
         }
+        // 嵌套子代理对话：选中落在嵌套对话里 → 同时展开父 turn 所属的顶层对话。
+        // Nested subagent conversations: a hit inside a nested one also expands
+        // the parent top-level conversation that contains the spawning turn.
+        for (const [, nestedArr] of session.nestedByParent) {
+          for (const subConv of nestedArr) {
+            const hit =
+              subConv.anchorItem.name === selectedName ||
+              subConv.turns.some((t) => t.name === selectedName);
+            if (hit) {
+              keysToOpen.add(session.key);
+              keysToOpen.add(subConv.key);
+              // 找到派生这个嵌套对话的父 turn 属于哪个顶层对话。
+              // Find which top-level conversation contains the parent turn.
+              const parentCapture = subConv.anchorItem.parentId;
+              if (parentCapture) {
+                for (const topConv of session.conversations) {
+                  if (
+                    topConv.anchorItem.name === parentCapture ||
+                    topConv.turns.some((t) => t.name === parentCapture)
+                  ) {
+                    keysToOpen.add(topConv.key);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+        // Utility 桶。
+        // Utility bucket.
         for (const u of session.utilityBucket) {
           if (u.name === selectedName) {
-            inThisSession = true;
-            if (next.has(session.key)) { next.delete(session.key); changed = true; }
-            if (next.has(session.utilityKey)) { next.delete(session.utilityKey); changed = true; }
+            keysToOpen.add(session.key);
+            keysToOpen.add(session.utilityKey);
           }
         }
-        void inThisSession;
+        for (const k of keysToOpen) {
+          if (next.has(k)) { next.delete(k); changed = true; }
+        }
       }
       return changed ? next : prev;
     });
@@ -227,9 +261,18 @@ const TreeNodeRow = memo(function TreeNodeRow({
   }
 
   if (node.type === "divider") {
-    // 占位渲染：Task 3 会替换为带样式的压缩分隔符。
-    // Placeholder: Task 3 replaces with a styled compression divider.
-    return <div ref={measureRef} className="compression-divider" style={style} data-index={vIndex}>{node.label}</div>;
+    return (
+      <div
+        ref={measureRef}
+        className="sidebar-divider"
+        style={style}
+        data-index={vIndex}
+      >
+        <span className="divider-line" />
+        <span className="divider-label">{node.label}</span>
+        <span className="divider-line" />
+      </div>
+    );
   }
 
   // leaf: continuation turn or utility capture
