@@ -172,21 +172,11 @@ body::after {
 }
 
 .file-item {
-  padding: 14px 0;
+  padding: 10px 24px 10px 24px;
   border-bottom: 1px solid var(--line-faint);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease;
   position: relative;
-}
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 .file-item:hover {
   background: var(--panel-2);
@@ -204,66 +194,29 @@ body::after {
   border-radius: 0 2px 2px 0;
   background: var(--sage-bright);
 }
-.file-item .preview {
-  color: var(--text-faint);
+.file-item .req-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 4px;
-  line-height: 1.5;
-  font-size: 11px;
-  font-family: var(--font-mono);
 }
-.file-item .preview .req-number {
-  color: var(--text-dim);
-  font-weight: 600;
-}
-.file-item .meta {
-  color: var(--text-faint);
-  font-size: 10.5px;
-  font-family: var(--font-mono);
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  letter-spacing: 0.02em;
-}
-.file-item .meta .req-tokens {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
-}
-.file-item .meta .tok-in {
-  color: var(--text-dim);
-}
-.file-item .meta .tok-arrow {
-  color: var(--text-faint);
-  opacity: 0.5;
-}
-.file-item .meta .tok-out {
-  color: var(--sage-deep);
-}
-
-/* 对话头 —— session 下方的可折叠对话单元，承载用户原始消息 + 左侧色条。*/
-/* Conversation header — the collapsible conversation unit under a session. Carries the
-   user's original message + the left-edge stripe. */
-.conversation-header {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line-faint);
-  cursor: pointer;
-  transition: background 0.2s ease;
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.conversation-header:hover {
-  background: var(--panel-2);
-}
-.conversation-header .caret {
-  color: var(--text-faint);
-  font-size: 10px;
+.file-item .req-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
-.conversation-header .conversation-preview {
+.file-item .req-dot.dot-sub {
+  background: #7a5fa8;
+}
+.file-item .req-dot.dot-explore {
+  background: var(--sage);
+}
+.file-item .req-dot.dot-util {
+  background: var(--text-faint);
+}
+.file-item .req-preview {
   color: var(--text);
-  font-weight: 600;
   font-size: 12.5px;
   line-height: 1.4;
   overflow: hidden;
@@ -271,106 +224,17 @@ body::after {
   white-space: nowrap;
   flex: 1;
 }
-.conversation-header .conversation-meta {
+.file-item .req-row-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
   color: var(--text-faint);
   font-size: 10.5px;
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
-  flex-shrink: 0;
 }
-.conversation-header .context-label {
+.file-item .req-tokens {
   color: var(--text-dim);
-  font-size: 10px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  flex-shrink: 0;
-  padding: 1px 5px;
-  border-radius: 3px;
-  background: var(--elevated);
-}
-.conversation-header.tagged-sub .context-label {
-  color: #7a5fa8;
-  background: rgba(122, 95, 168, 0.1);
-}
-.conversation-header.tagged-explore .context-label {
-  color: var(--sage-deep);
-  background: var(--sage-dim);
-}
-
-/* 对话头的左侧色条 —— 复用 .file-item 已有的 ::before 系统。
-   .conversation-header 的 ::before 规则与 .file-item::before 一致，颜色由 tagged-* 类决定。*/
-/* Conversation-header left stripe — reuses the same ::before system as .file-item.
-   The ::before rule mirrors .file-item::before; color comes from the tagged-* class. */
-.conversation-header::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: transparent;
-}
-.conversation-header.tagged-sub::before {
-  background: #7a5fa8;
-}
-.conversation-header.tagged-explore::before {
-  background: var(--sage);
-}
-.conversation-header.tagged-util::before {
-  background: var(--text-faint);
-}
-
-/* Utility 桶头 —— 沉默样式，永远默认折叠。*/
-/* Utility bucket header — muted; always starts collapsed. */
-.utility-header {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line-faint);
-  cursor: pointer;
-  transition: background 0.2s ease;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.utility-header:hover {
-  background: var(--panel-2);
-}
-.utility-header .caret {
-  color: var(--text-faint);
-  font-size: 10px;
-  flex-shrink: 0;
-}
-.utility-header .utility-label {
-  color: var(--text-faint);
-  font-size: 11px;
-  font-style: italic;
-}
-
-/* 压缩边界分隔条 —— 非交互的视觉缝隙，仅出现在 compressed turn 之前。*/
-/* Compression-boundary divider — a non-interactive visual seam that appears only
-   before a compressed turn. */
-.sidebar-divider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  color: var(--text-faint);
-  font-size: 10px;
-  font-family: var(--font-mono);
-  font-style: italic;
-  letter-spacing: 0.04em;
-  pointer-events: none; /* 非交互 —— 不阻挡下层点击 / non-interactive — doesn't block clicks */
-}
-.sidebar-divider .divider-line {
-  flex: 1;
-  height: 1px;
-  background: var(--line-faint);
-}
-.sidebar-divider .divider-label {
-  flex-shrink: 0;
-  text-transform: lowercase;
 }
 
 .badge {
