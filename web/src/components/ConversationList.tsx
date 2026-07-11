@@ -133,26 +133,29 @@ const TreeNodeRow = memo(function TreeNodeRow({
   const badgeCls = it.status === 200 ? "ok" : it.status ? "err" : "neutral";
   const isActive = it.name === selectedName;
   // 主代理行不显示标签（占多数，全标会变成噪声）；只标子代理 / Explore / 工具调用。
-  // Main-agent rows get no pill (they're the majority — tagging all rows is noise).
-  const tagPill = (() => {
+  // 左侧色条 + meta 行的文字标签共同传达分类，色条颜色与文字颜色呼应。
+  // Main-agent rows get no tag (they're the majority — tagging all rows is noise).
+  // The left-edge stripe color and the meta-row label color echo each other.
+  const tagInfo = (() => {
     switch (it.tag) {
-      case "subagent": return <span className="tag tag-sub">Sub</span>;
-      case "explore":  return <span className="tag tag-explore">Explore</span>;
-      case "utility":  return <span className="tag tag-util">Util</span>;
+      case "subagent": return { stripe: "tagged-sub", label: "Sub" };
+      case "explore":  return { stripe: "tagged-explore", label: "Explore" };
+      case "utility":  return { stripe: "tagged-util", label: "Util" };
       default:         return null;
     }
   })();
   return (
     <div
       ref={measureRef}
-      className={`file-item${isActive ? " active" : ""}`}
+      className={`file-item${isActive ? " active" : ""}${tagInfo ? ` ${tagInfo.stripe}` : ""}`}
       style={style}
       onClick={() => onSelect(it.name)}
       data-index={vIndex}
     >
-      <div className="preview">{tagPill}{it.preview}</div>
+      <div className="preview">{it.preview}</div>
       <div className="meta">
         <span className={`badge ${badgeCls}`}>{it.status || "—"}</span>
+        {tagInfo && <span className={`tag-label tag-label-${it.tag}`}>· {tagInfo.label}</span>}
         <span>{formatTime(it.mtime)}</span>
         <span>{(it.size / 1024).toFixed(1)}k</span>
       </div>

@@ -194,15 +194,32 @@ body::after {
 .file-item.active {
   background: linear-gradient(90deg, var(--sage-dim) 0%, transparent 100%);
 }
-.file-item.active::before {
+/* 左侧色条 —— 默认透明（主代理行），子代理 / Explore / 工具调用用各自颜色，选中行用 sage。
+   所有色条共用同一 ::before，靠 background 区分；tagged-* 规则在 .active 之后，激活+标记时颜色优先用 tag。*/
+/* Left-edge stripe — transparent by default (main-agent rows); subagent / explore / utility
+   use their own color; active rows use sage. All stripes share one ::before, distinguished
+   by background; tagged-* rules come after .active so a tagged+active row keeps its tag color. */
+.file-item::before {
   content: "";
   position: absolute;
   left: 0;
   top: 8px;
   bottom: 8px;
-  width: 2px;
-  background: var(--sage-bright);
+  width: 3px;
   border-radius: 0 2px 2px 0;
+  background: transparent;
+}
+.file-item.active::before {
+  background: var(--sage-bright);
+}
+.file-item.tagged-sub::before {
+  background: #7a5fa8;
+}
+.file-item.tagged-explore::before {
+  background: var(--sage);
+}
+.file-item.tagged-util::before {
+  background: var(--text-faint);
 }
 .file-item .preview {
   color: var(--text);
@@ -250,36 +267,21 @@ body::after {
   border-color: var(--line);
 }
 
-/* 标签药丸 —— 标记子代理 / Explore / 工具调用请求。尺寸与 .badge 对齐。 */
-/* Tag pills — mark subagent / explore / utility requests. Sized to match .badge. */
-.tag {
-  display: inline-block;
-  vertical-align: middle;
-  margin-right: 8px;
-  padding: 1px 7px;
-  border-radius: 8px;
-  font-size: 9.5px;
+/* 标签文字 —— 出现在 meta 行（状态码之后），颜色与左侧色条呼应；不是药丸，刻意区别于 .badge。 */
+/* Tag label text — appears in the meta row after the status code; color echoes the left
+   stripe. Deliberately plain text (not a pill) to contrast with the filled .badge. */
+.tag-label {
   font-weight: 600;
-  font-family: var(--font-mono);
   letter-spacing: 0.04em;
-  border: 1px solid transparent;
-  line-height: 1.5;
-  flex-shrink: 0;
 }
-.tag-sub {
-  background: rgba(122, 95, 168, 0.12);
-  color: #5b4180;
-  border-color: rgba(122, 95, 168, 0.28);
+.tag-label-sub {
+  color: #7a5fa8;
 }
-.tag-explore {
-  background: var(--sage-dim);
-  color: var(--sage-deep);
-  border-color: rgba(90, 125, 82, 0.25);
+.tag-label-explore {
+  color: var(--sage);
 }
-.tag-util {
-  background: var(--elevated);
+.tag-label-util {
   color: var(--text-dim);
-  border-color: var(--line);
 }
 
 /* ============ MAIN ============ */
