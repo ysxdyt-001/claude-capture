@@ -119,4 +119,6 @@ export interface ListItem {
   kind?: "anchor" | "continuation" | "compressed";
   parentId?: string; // main-agent capture filename that dispatched this subagent; absent = top-level
   messageCount?: number; // server-internal, used for compression detection; not rendered
+  inputTokens?: number; // from response usage; shown in leaf meta
+  outputTokens?: number; // from response usage; shown in leaf meta
 }

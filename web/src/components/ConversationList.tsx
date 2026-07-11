@@ -13,35 +13,33 @@ interface ConversationListProps {
 export default function ConversationList({ items, selectedName, onSelect }: ConversationListProps) {
   const tree = useMemo(() => buildTree(items), [items]);
 
-  // 折叠的 session key 集合。空集合 = 全展开。
-  // Collapsed-session keys. Empty set = all expanded.
+  // 折叠的 key 集合（session / context / utility 桶共用）。
+  // Collapsed keys (shared across sessions, contexts, and utility buckets).
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
 
-  // 首次数据到达后：折叠除最新 session 外的所有 session；最新 session 内折叠除最新对话外的所有对话；utility 桶永远默认折叠。
-  // On first data: collapse all sessions except newest; within newest, collapse all
-  // conversations except the newest; utility buckets always start collapsed.
+  // 默认折叠：非最新 session 全折；最新 session 内折叠除第一条外的所有 context；utility 桶全折。
+  // Default: collapse all sessions except newest; within newest, collapse all contexts except the
+  // first; utility buckets always collapsed.
   const didInit = useRef(false);
   useEffect(() => {
     if (didInit.current || tree.length === 0) return;
     didInit.current = true;
     const collapsed = new Set<string>();
-    for (let i = 1; i < tree.length; i++) {
-      const n = tree[i];
-      if (n.type === "session") collapsed.add(n.key);
-    }
-    const newest = tree[0];
-    if (newest && newest.type === "session") {
-      for (let i = 1; i < newest.conversations.length; i++) {
-        collapsed.add(newest.conversations[i].key);
+    for (const node of tree) {
+      if (node.type !== "session") continue;
+      if (node !== tree[0]) {
+        collapsed.add(node.key);
+        for (const conv of node.conversations) collapsed.add(conv.key);
+      } else {
+        for (let i = 1; i < node.conversations.length; i++) collapsed.add(node.conversations[i].key);
       }
-      collapsed.add(newest.utilityKey);
+      collapsed.add(node.utilityKey);
     }
     setCollapsedKeys(collapsed);
   }, [tree]);
 
-  // 选中项落在折叠的对话 / utility 桶 / session 里时，自动展开祖先，保证选中行可见。
-  // When the selected capture lives inside a collapsed conversation / utility bucket / session,
-  // expand the ancestors so the selection is visible.
+  // 选中项落在折叠的 context / utility 桶 / session 里时，自动展开。
+  // Auto-expand the ancestor of a selected capture so it's visible.
   useEffect(() => {
     if (!selectedName) return;
     setCollapsedKeys((prev) => {
@@ -49,50 +47,16 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
       const next = new Set(prev);
       for (const session of tree) {
         if (session.type !== "session") continue;
-        // 收集本 session 里所有需要展开的 key（session / 顶层对话 / 嵌套对话 / utility）。
-        // Collect every key in this session that needs expanding.
         const keysToOpen = new Set<string>();
-        // 顶层对话 + 嵌套对话。
-        // Top-level + nested conversations.
         for (const conv of session.conversations) {
-          const hitTop =
+          if (
             conv.anchorItem.name === selectedName ||
-            conv.turns.some((t) => t.name === selectedName);
-          if (hitTop) {
+            conv.turns.some((t) => t.name === selectedName)
+          ) {
             keysToOpen.add(session.key);
             keysToOpen.add(conv.key);
           }
         }
-        // 嵌套子代理对话：选中落在嵌套对话里 → 同时展开父 turn 所属的顶层对话。
-        // Nested subagent conversations: a hit inside a nested one also expands
-        // the parent top-level conversation that contains the spawning turn.
-        for (const [, nestedArr] of session.nestedByParent) {
-          for (const subConv of nestedArr) {
-            const hit =
-              subConv.anchorItem.name === selectedName ||
-              subConv.turns.some((t) => t.name === selectedName);
-            if (hit) {
-              keysToOpen.add(session.key);
-              keysToOpen.add(subConv.key);
-              // 找到派生这个嵌套对话的父 turn 属于哪个顶层对话。
-              // Find which top-level conversation contains the parent turn.
-              const parentCapture = subConv.anchorItem.parentId;
-              if (parentCapture) {
-                for (const topConv of session.conversations) {
-                  if (
-                    topConv.anchorItem.name === parentCapture ||
-                    topConv.turns.some((t) => t.name === parentCapture)
-                  ) {
-                    keysToOpen.add(topConv.key);
-                    break;
-                  }
-                }
-              }
-            }
-          }
-        }
-        // Utility 桶。
-        // Utility bucket.
         for (const u of session.utilityBucket) {
           if (u.name === selectedName) {
             keysToOpen.add(session.key);
@@ -109,16 +73,9 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
 
   const visibleRows = useMemo(() => flattenVisible(tree, collapsedKeys), [tree, collapsedKeys]);
 
-  // 把最新 visibleRows 放进 ref：measureElement 的 ResizeObserver 是异步回调，
-  // 触发时 visibleRows 可能已变（轮询/折叠），需要读到最新数组才能正确映射 key。
-  // Mirror visibleRows into a ref: measureElement's ResizeObserver fires async,
-  // by which time visibleRows may have changed (poll/collapse). It must read the
-  // latest array to map the DOM element back to the correct key.
   const visibleRowsRef = useRef(visibleRows);
   visibleRowsRef.current = visibleRows;
 
-  // useCallback 保证 toggle 引用稳定，让 TreeNodeRow 的 memo() 生效。
-  // useCallback keeps toggle's identity stable so TreeNodeRow's memo() actually works.
   const toggle = useCallback((key: string) => {
     setCollapsedKeys((prev) => {
       const next = new Set(prev);
@@ -132,7 +89,7 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 60,
+    estimateSize: () => 56,
     overscan: 8,
     getItemKey: (i) => {
       const row = visibleRowsRef.current[i];
@@ -172,8 +129,8 @@ interface TreeNodeRowProps {
   measureRef: (el: HTMLElement | null) => void;
 }
 
-// 对话头左侧色条映射（与 Task 1 的 tag 值对应）。
-// Conversation-header left-stripe class lookup (matches Task 1's tag values).
+// context header 左侧色条（tag → CSS 类）。
+// Context-header left stripe (tag → CSS class).
 function conversationStripe(tag?: string): string {
   switch (tag) {
     case "subagent": return "tagged-sub";
@@ -181,6 +138,26 @@ function conversationStripe(tag?: string): string {
     case "utility":  return "tagged-util";
     default:         return "";
   }
+}
+
+// context header 的类型标签。
+// Context-header type label.
+function contextLabel(tag?: string, isBranch?: boolean): string {
+  if (isBranch) {
+    if (tag === "explore") return "↳ Explore";
+    return "↳ Sub";
+  }
+  if (tag === "subagent") return "Sub";
+  if (tag === "explore") return "Explore";
+  return "Main";
+}
+
+// 格式化 token 数：1000 → 1k，1500 → 1.5k。
+// Format token counts: 1000 → 1k, 1500 → 1.5k.
+function fmtTokens(n?: number): string {
+  if (!n) return "—";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
 }
 
 const TreeNodeRow = memo(function TreeNodeRow({
@@ -203,11 +180,6 @@ const TreeNodeRow = memo(function TreeNodeRow({
     paddingRight: "24px",
   };
 
-  // STUB: Task 2 — renderer 尚未学习嵌套布局（depth-based indentation 对嵌套子代理）。
-  // Task 3 会增强渲染：嵌套缩进、divider 样式、子代理 ancestry 标记。
-  // STUB: Task 2 — renderer hasn't learned nested layout yet (depth-based indentation for
-  // nested subagents). Task 3 enhances rendering: nested indent, divider style, subagent ancestry.
-
   if (node.type === "session") {
     return (
       <button
@@ -220,6 +192,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
       >
         <span className="caret">{collapsed ? "▸" : "▾"}</span>
         <span className="session-key">{node.name}</span>
+        <span className="session-meta">started {formatTime(node.startTime)}</span>
         <span className="session-count">[{node.captureCount}]</span>
       </button>
     );
@@ -227,6 +200,7 @@ const TreeNodeRow = memo(function TreeNodeRow({
 
   if (node.type === "conversation") {
     const stripe = conversationStripe(node.tag);
+    const label = contextLabel(node.tag, node.isBranch);
     return (
       <div
         ref={measureRef}
@@ -236,9 +210,10 @@ const TreeNodeRow = memo(function TreeNodeRow({
         data-index={vIndex}
       >
         <span className="caret">{collapsed ? "▸" : "▾"}</span>
+        <span className="context-label">{label}</span>
         <span className="conversation-preview">{node.anchorItem.preview}</span>
         <span className="conversation-meta">
-          {node.turnCount} turn{node.turnCount === 1 ? "" : "s"} · {formatTime(node.startTime)}
+          {node.turnCount} req · {formatTime(node.startTime)}
         </span>
       </div>
     );
@@ -275,7 +250,8 @@ const TreeNodeRow = memo(function TreeNodeRow({
     );
   }
 
-  // leaf: continuation turn or utility capture
+  // leaf: 一个 HTTP 请求（POST /messages）。显示编号 + 状态 + 时间 + token 用量。
+  // Leaf: one HTTP request (POST /messages). Shows number + status + time + token usage.
   const it = node.item;
   const badgeCls = it.status === 200 ? "ok" : it.status ? "err" : "neutral";
   const isActive = it.name === selectedName;
@@ -287,11 +263,17 @@ const TreeNodeRow = memo(function TreeNodeRow({
       onClick={() => onSelect(it.name)}
       data-index={vIndex}
     >
-      <div className="preview">{it.preview}</div>
+      <div className="preview">
+        <span className="req-number">{node.label}</span>
+      </div>
       <div className="meta">
         <span className={`badge ${badgeCls}`}>{it.status || "—"}</span>
+        <span className="req-tokens" title="input → output tokens">
+          <span className="tok-in">{fmtTokens(it.inputTokens)}</span>
+          <span className="tok-arrow">→</span>
+          <span className="tok-out">{fmtTokens(it.outputTokens)}</span>
+        </span>
         <span>{formatTime(it.mtime)}</span>
-        <span>{(it.size / 1024).toFixed(1)}k</span>
       </div>
     </div>
   );

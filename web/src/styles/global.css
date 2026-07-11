@@ -205,15 +205,15 @@ body::after {
   background: var(--sage-bright);
 }
 .file-item .preview {
-  color: var(--text);
-  margin-bottom: 8px;
+  color: var(--text-faint);
+  margin-bottom: 4px;
   line-height: 1.5;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  font-size: 12.5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.file-item .preview .req-number {
+  color: var(--text-dim);
+  font-weight: 600;
 }
 .file-item .meta {
   color: var(--text-faint);
@@ -223,6 +223,21 @@ body::after {
   gap: 10px;
   align-items: center;
   letter-spacing: 0.02em;
+}
+.file-item .meta .req-tokens {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.file-item .meta .tok-in {
+  color: var(--text-dim);
+}
+.file-item .meta .tok-arrow {
+  color: var(--text-faint);
+  opacity: 0.5;
+}
+.file-item .meta .tok-out {
+  color: var(--sage-deep);
 }
 
 /* 对话头 —— session 下方的可折叠对话单元，承载用户原始消息 + 左侧色条。*/
@@ -262,6 +277,26 @@ body::after {
   font-family: var(--font-mono);
   letter-spacing: 0.02em;
   flex-shrink: 0;
+}
+.conversation-header .context-label {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--elevated);
+}
+.conversation-header.tagged-sub .context-label {
+  color: #7a5fa8;
+  background: rgba(122, 95, 168, 0.1);
+}
+.conversation-header.tagged-explore .context-label {
+  color: var(--sage-deep);
+  background: var(--sage-dim);
 }
 
 /* 对话头的左侧色条 —— 复用 .file-item 已有的 ::before 系统。
@@ -1529,6 +1564,11 @@ details summary:hover {
   color: var(--text-faint);
   font-size: 10px;
   margin-left: auto;
+}
+.session-header .session-meta {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-family: var(--font-mono);
 }
 
 /* ============ SIDEBAR RESIZE HANDLE ============ */
