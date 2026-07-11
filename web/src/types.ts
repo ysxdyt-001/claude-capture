@@ -116,4 +116,5 @@ export interface ListItem {
   status?: number;
   preview: string;
   tag?: string; // "main" | "subagent" | "explore" | "utility" | "unknown"
+  kind?: "anchor" | "continuation";
 }
