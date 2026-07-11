@@ -1,6 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type TreeNode, buildTree, flattenVisible } from "../lib/groupSessions";
+import { formatTime } from "../lib/format";
 import type { ListItem } from "../types";
 
 interface ConversationListProps {
@@ -16,14 +17,61 @@ export default function ConversationList({ items, selectedName, onSelect }: Conv
   // Collapsed-session keys. Empty set = all expanded.
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
 
-  // 数据首次到达后，折叠除最新 session 外的所有组（tree[0] 是最新，因为按 newestMtime desc 排序）。
-  // Once data first arrives, collapse every session except the newest (tree[0] is newest because of desc sort).
+  // 首次数据到达后：折叠除最新 session 外的所有 session；最新 session 内折叠除最新对话外的所有对话；utility 桶永远默认折叠。
+  // On first data: collapse all sessions except newest; within newest, collapse all
+  // conversations except the newest; utility buckets always start collapsed.
   const didInit = useRef(false);
   useEffect(() => {
     if (didInit.current || tree.length === 0) return;
     didInit.current = true;
-    setCollapsedKeys(new Set(tree.slice(1).map((n) => n.key)));
+    const collapsed = new Set<string>();
+    for (let i = 1; i < tree.length; i++) {
+      const n = tree[i];
+      if (n.type === "session") collapsed.add(n.key);
+    }
+    const newest = tree[0];
+    if (newest && newest.type === "session") {
+      for (let i = 1; i < newest.conversations.length; i++) {
+        collapsed.add(newest.conversations[i].key);
+      }
+      collapsed.add(newest.utilityKey);
+    }
+    setCollapsedKeys(collapsed);
   }, [tree]);
+
+  // 选中项落在折叠的对话 / utility 桶 / session 里时，自动展开祖先，保证选中行可见。
+  // When the selected capture lives inside a collapsed conversation / utility bucket / session,
+  // expand the ancestors so the selection is visible.
+  useEffect(() => {
+    if (!selectedName) return;
+    setCollapsedKeys((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const session of tree) {
+        if (session.type !== "session") continue;
+        let inThisSession = false;
+        for (const conv of session.conversations) {
+          const hit =
+            conv.anchorItem.name === selectedName ||
+            conv.turns.some((t) => t.name === selectedName);
+          if (hit) {
+            inThisSession = true;
+            if (next.has(session.key)) { next.delete(session.key); changed = true; }
+            if (next.has(conv.key)) { next.delete(conv.key); changed = true; }
+          }
+        }
+        for (const u of session.utilityBucket) {
+          if (u.name === selectedName) {
+            inThisSession = true;
+            if (next.has(session.key)) { next.delete(session.key); changed = true; }
+            if (next.has(session.utilityKey)) { next.delete(session.utilityKey); changed = true; }
+          }
+        }
+        void inThisSession;
+      }
+      return changed ? next : prev;
+    });
+  }, [selectedName, tree]);
 
   const visibleRows = useMemo(() => flattenVisible(tree, collapsedKeys), [tree, collapsedKeys]);
 
@@ -90,18 +138,27 @@ interface TreeNodeRowProps {
   measureRef: (el: HTMLElement | null) => void;
 }
 
+// 对话头左侧色条映射（与 Task 1 的 tag 值对应）。
+// Conversation-header left-stripe class lookup (matches Task 1's tag values).
+function conversationStripe(tag?: string): string {
+  switch (tag) {
+    case "subagent": return "tagged-sub";
+    case "explore":  return "tagged-explore";
+    case "utility":  return "tagged-util";
+    default:         return "";
+  }
+}
+
 const TreeNodeRow = memo(function TreeNodeRow({
   node,
-  collapsed: _collapsed,
-  selectedName: _selectedName,
-  onToggle: _onToggle,
-  onSelect: _onSelect,
+  collapsed,
+  selectedName,
+  onToggle,
+  onSelect,
   vStart,
-  vIndex: _vIndex,
+  vIndex,
   measureRef,
 }: TreeNodeRowProps) {
-  // TEMPORARY STUB (Task 2): renderer disabled so the new grouping logic can build in
-  // isolation. Task 3 replaces this stub with the real multi-type renderer.
   const style: React.CSSProperties = {
     position: "absolute",
     top: 0,
@@ -111,5 +168,77 @@ const TreeNodeRow = memo(function TreeNodeRow({
     paddingLeft: `${24 + node.depth * 16}px`,
     paddingRight: "24px",
   };
-  return <div ref={measureRef} style={style} />;
+
+  if (node.type === "session") {
+    return (
+      <button
+        ref={measureRef as React.Ref<HTMLButtonElement>}
+        type="button"
+        className="session-header"
+        style={style}
+        onClick={() => onToggle(node.key)}
+        data-index={vIndex}
+      >
+        <span className="caret">{collapsed ? "▸" : "▾"}</span>
+        <span className="session-key">{node.name}</span>
+        <span className="session-count">[{node.captureCount}]</span>
+      </button>
+    );
+  }
+
+  if (node.type === "conversation") {
+    const stripe = conversationStripe(node.tag);
+    return (
+      <div
+        ref={measureRef}
+        className={`conversation-header${stripe ? ` ${stripe}` : ""}`}
+        style={style}
+        onClick={() => onToggle(node.key)}
+        data-index={vIndex}
+      >
+        <span className="caret">{collapsed ? "▸" : "▾"}</span>
+        <span className="conversation-preview">{node.anchorItem.preview}</span>
+        <span className="conversation-meta">
+          {node.turnCount} turn{node.turnCount === 1 ? "" : "s"} · {formatTime(node.startTime)}
+        </span>
+      </div>
+    );
+  }
+
+  if (node.type === "utility") {
+    return (
+      <div
+        ref={measureRef}
+        className="utility-header"
+        style={style}
+        onClick={() => onToggle(node.key)}
+        data-index={vIndex}
+      >
+        <span className="caret">{collapsed ? "▸" : "▾"}</span>
+        <span className="utility-label">Utility calls</span>
+        <span className="session-count">[{node.captures.length}]</span>
+      </div>
+    );
+  }
+
+  // leaf: continuation turn or utility capture
+  const it = node.item;
+  const badgeCls = it.status === 200 ? "ok" : it.status ? "err" : "neutral";
+  const isActive = it.name === selectedName;
+  return (
+    <div
+      ref={measureRef}
+      className={`file-item${isActive ? " active" : ""}`}
+      style={style}
+      onClick={() => onSelect(it.name)}
+      data-index={vIndex}
+    >
+      <div className="preview">{it.preview}</div>
+      <div className="meta">
+        <span className={`badge ${badgeCls}`}>{it.status || "—"}</span>
+        <span>{formatTime(it.mtime)}</span>
+        <span>{(it.size / 1024).toFixed(1)}k</span>
+      </div>
+    </div>
+  );
 });

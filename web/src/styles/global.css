@@ -194,12 +194,7 @@ body::after {
 .file-item.active {
   background: linear-gradient(90deg, var(--sage-dim) 0%, transparent 100%);
 }
-/* 左侧色条 —— 默认透明（主代理行），子代理 / Explore / 工具调用用各自颜色，选中行用 sage。
-   所有色条共用同一 ::before，靠 background 区分；tagged-* 规则在 .active 之后，激活+标记时颜色优先用 tag。*/
-/* Left-edge stripe — transparent by default (main-agent rows); subagent / explore / utility
-   use their own color; active rows use sage. All stripes share one ::before, distinguished
-   by background; tagged-* rules come after .active so a tagged+active row keeps its tag color. */
-.file-item::before {
+.file-item.active::before {
   content: "";
   position: absolute;
   left: 0;
@@ -207,19 +202,7 @@ body::after {
   bottom: 8px;
   width: 3px;
   border-radius: 0 2px 2px 0;
-  background: transparent;
-}
-.file-item.active::before {
   background: var(--sage-bright);
-}
-.file-item.tagged-sub::before {
-  background: #7a5fa8;
-}
-.file-item.tagged-explore::before {
-  background: var(--sage);
-}
-.file-item.tagged-util::before {
-  background: var(--text-faint);
 }
 .file-item .preview {
   color: var(--text);
@@ -240,6 +223,94 @@ body::after {
   gap: 10px;
   align-items: center;
   letter-spacing: 0.02em;
+}
+
+/* 对话头 —— session 下方的可折叠对话单元，承载用户原始消息 + 左侧色条。*/
+/* Conversation header — the collapsible conversation unit under a session. Carries the
+   user's original message + the left-edge stripe. */
+.conversation-header {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-faint);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.conversation-header:hover {
+  background: var(--panel-2);
+}
+.conversation-header .caret {
+  color: var(--text-faint);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.conversation-header .conversation-preview {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.conversation-header .conversation-meta {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+/* 对话头的左侧色条 —— 复用 .file-item 已有的 ::before 系统。
+   .conversation-header 的 ::before 规则与 .file-item::before 一致，颜色由 tagged-* 类决定。*/
+/* Conversation-header left stripe — reuses the same ::before system as .file-item.
+   The ::before rule mirrors .file-item::before; color comes from the tagged-* class. */
+.conversation-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+}
+.conversation-header.tagged-sub::before {
+  background: #7a5fa8;
+}
+.conversation-header.tagged-explore::before {
+  background: var(--sage);
+}
+.conversation-header.tagged-util::before {
+  background: var(--text-faint);
+}
+
+/* Utility 桶头 —— 沉默样式，永远默认折叠。*/
+/* Utility bucket header — muted; always starts collapsed. */
+.utility-header {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-faint);
+  cursor: pointer;
+  transition: background 0.2s ease;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.utility-header:hover {
+  background: var(--panel-2);
+}
+.utility-header .caret {
+  color: var(--text-faint);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.utility-header .utility-label {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-style: italic;
 }
 
 .badge {
@@ -265,23 +336,6 @@ body::after {
   background: var(--elevated);
   color: var(--text-dim);
   border-color: var(--line);
-}
-
-/* 标签文字 —— 出现在 meta 行（状态码之后），颜色与左侧色条呼应；不是药丸，刻意区别于 .badge。 */
-/* Tag label text — appears in the meta row after the status code; color echoes the left
-   stripe. Deliberately plain text (not a pill) to contrast with the filled .badge. */
-.tag-label {
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-.tag-label-sub {
-  color: #7a5fa8;
-}
-.tag-label-explore {
-  color: var(--sage);
-}
-.tag-label-util {
-  color: var(--text-dim);
 }
 
 /* ============ MAIN ============ */
