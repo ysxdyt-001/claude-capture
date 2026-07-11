@@ -1,81 +1,256 @@
 import type { ListItem } from "../types";
 
-// 树节点：session（目录）或 leaf（单条 capture）。depth 用于渲染缩进。
-// Tree node: a session (directory) or a leaf (single capture). depth drives render indent.
-export interface TreeNode {
-  type: "session" | "leaf";
-  depth: number; // 0 = top-level session; 1 = direct leaf; 2+ = future nested
-  key: string; // unique key (React list + collapse state)
-  name: string; // full path for leaves; session dirname for sessions
-  // session-only:
-  captures?: ListItem[];
-  newestMtime?: number;
-  // leaf-only:
-  item?: ListItem;
+// 会话侧边栏的树节点：session → conversation/utility → leaf（turn 或 utility capture）。
+// 用判别联合（node.type）让渲染端的类型收窄自然落地。
+// Sidebar tree nodes: session → conversation/utility → leaf (turn or utility capture).
+// Discriminated union (node.type) so the renderer narrows naturally.
+
+export interface SessionNode {
+  type: "session";
+  depth: number;            // 0
+  key: string;              // session key (directory prefix)
+  name: string;             // session dirname
+  conversations: ConversationHeaderNode[]; // newest-first by endTime
+  utilityBucket: ListItem[];               // utility-tagged captures, oldest-first
+  utilityKey: string;       // `${key}#utility` — collapse key for the utility bucket
+  newestMtime: number;      // for cross-session sort
+  captureCount: number;     // conversations + utility, for the header badge
 }
+
+export interface ConversationHeaderNode {
+  type: "conversation";
+  depth: number;            // 1
+  key: string;              // `${sessionKey}#${anchorCaptureName}`
+  anchorItem: ListItem;     // the anchor capture; rendered as the header
+  turns: ListItem[];        // continuation captures only, oldest-first
+  turnCount: number;        // turns.length + 1 (the anchor counts as turn 1)
+  startTime: number;        // anchorItem.mtime
+  endTime: number;          // last turn mtime, or anchor mtime if no turns
+  tag?: string;             // inherited from anchorItem.tag
+}
+
+export interface UtilityBucketNode {
+  type: "utility";
+  depth: number;            // 1
+  key: string;              // `${sessionKey}#utility`
+  captures: ListItem[];     // oldest-first
+}
+
+export interface LeafNode {
+  type: "leaf";
+  depth: number;            // 2 (under a conversation or utility bucket)
+  key: string;              // capture filename (stable across polls)
+  name: string;
+  item: ListItem;
+}
+
+export type TreeNode = SessionNode | ConversationHeaderNode | UtilityBucketNode | LeafNode;
 
 const UNGROUPED = "ungrouped";
 
-// 把扁平的 ListItem[] 组织成 TreeNode 树。
-// 今天只产生 2 层（session 深度 0 + 叶子深度 1）；未来嵌套路径只需扩展本函数。
-// Organize a flat ListItem[] into a TreeNode tree.
-// Today emits 2 levels (session depth 0 + leaves depth 1); future nested paths only extend this function.
+// 模块级缓存：相同 key 且底层 ListItem 引用未变 → 复用同一个 wrapper 节点。
+// 下游 TreeNodeRow 的 memo() 依赖这个引用稳定性来跳过未变行的重渲染。
+// Module-level caches: same key AND underlying ListItem refs unchanged → reuse the same
+// wrapper node. Downstream TreeNodeRow's memo() relies on this identity stability.
+const sessionCache = new Map<string, SessionNode>();
+const conversationCache = new Map<string, ConversationHeaderNode>();
+const leafCache = new Map<string, LeafNode>();
+const utilityCache = new Map<string, UtilityBucketNode>();
+
+function itemsEqual(a: ListItem[], b: ListItem[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function getOrCreateLeaf(item: ListItem, depth: number): LeafNode {
+  let leaf = leafCache.get(item.name);
+  if (!leaf || leaf.item !== item || leaf.depth !== depth) {
+    leaf = { type: "leaf", depth, key: item.name, name: item.name, item };
+    leafCache.set(item.name, leaf);
+  }
+  return leaf;
+}
+
+function getOrCreateConversation(
+  sessionKey: string,
+  anchor: ListItem,
+  turns: ListItem[]
+): ConversationHeaderNode {
+  const key = `${sessionKey}#${anchor.name}`;
+  const cached = conversationCache.get(key);
+  if (cached && cached.anchorItem === anchor && itemsEqual(cached.turns, turns)) {
+    return cached;
+  }
+  const conv: ConversationHeaderNode = {
+    type: "conversation",
+    depth: 1,
+    key,
+    anchorItem: anchor,
+    turns,
+    turnCount: turns.length + 1,
+    startTime: anchor.mtime,
+    endTime: turns.length ? turns[turns.length - 1].mtime : anchor.mtime,
+    tag: anchor.tag,
+  };
+  conversationCache.set(key, conv);
+  return conv;
+}
+
+function getOrCreateUtility(key: string, captures: ListItem[]): UtilityBucketNode {
+  const cached = utilityCache.get(key);
+  if (cached && itemsEqual(cached.captures, captures)) {
+    return cached;
+  }
+  const bucket: UtilityBucketNode = {
+    type: "utility",
+    depth: 1,
+    key,
+    captures,
+  };
+  utilityCache.set(key, bucket);
+  return bucket;
+}
+
+function getOrCreateSession(
+  key: string,
+  conversations: ConversationHeaderNode[],
+  utilityBucket: ListItem[],
+  newestMtime: number,
+  captureCount: number
+): SessionNode {
+  const cached = sessionCache.get(key);
+  if (
+    cached &&
+    itemsEqualSessions(cached.conversations, conversations) &&
+    itemsEqual(cached.utilityBucket, utilityBucket) &&
+    cached.captureCount === captureCount
+  ) {
+    return cached;
+  }
+  const session: SessionNode = {
+    type: "session",
+    depth: 0,
+    key,
+    name: key,
+    conversations,
+    utilityBucket,
+    utilityKey: `${key}#utility`,
+    newestMtime,
+    captureCount,
+  };
+  sessionCache.set(key, session);
+  return session;
+}
+
+// itemsEqualSessions: 引用比较 conversation 节点数组（conversation 节点本身已通过缓存稳定）。
+// itemsEqualSessions: reference-compare conversation node arrays (the conversation nodes
+// themselves are already stabilized via the cache).
+function itemsEqualSessions(a: ConversationHeaderNode[], b: ConversationHeaderNode[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// 把扁平的 ListItem[] 组织成 3 层树：session → conversation → turns，外加 utility 桶。
+// 同一 session 内：按 mtime 升序遍历，anchor 开新对话，continuation 追加；utility 单独入桶。
+// Organize a flat ListItem[] into a 3-level tree: session → conversation → turns, plus a
+// utility bucket. Within a session: walk oldest-first, anchor starts a new conversation,
+// continuation appends; utility captures go into a separate bucket.
 export function buildTree(items: ListItem[]): TreeNode[] {
-  const buckets = new Map<string, ListItem[]>();
+  // 1. 按 session key 分桶（保留第一个 '/' 切分，兼容无 '/' 的裸文件名）。
+  // 1. Bucket by session key (split on first '/'; tolerate bare filenames).
+  const sessionBuckets = new Map<string, ListItem[]>();
   for (const it of items) {
     const slashIdx = it.name.indexOf("/");
     const key = slashIdx === -1 ? UNGROUPED : it.name.slice(0, slashIdx);
-    const arr = buckets.get(key);
+    const arr = sessionBuckets.get(key);
     if (arr) arr.push(it);
-    else buckets.set(key, [it]);
+    else sessionBuckets.set(key, [it]);
   }
 
-  const sessions: TreeNode[] = [];
-  for (const [key, captures] of buckets) {
-    // 服务器已按 mtime desc 排序；组内顺序保留。
-    // Server already sorts by mtime desc; preserve within-group order.
+  const sessions: SessionNode[] = [];
+  for (const [key, captures] of sessionBuckets) {
+    // 2. 把 utility 单独拎出来，不参与对话分组。
+    // 2. Pull utility captures aside; they don't participate in conversation grouping.
+    const conversational = captures.filter((c) => c.tag !== "utility");
+    const utility = captures.filter((c) => c.tag === "utility");
+
+    // 3. 对话用 capture 按 mtime 升序，便于按时间顺序遍历分组。
+    // 3. Conversational captures oldest-first so grouping walks in chronological order.
+    const sorted = [...conversational].sort((a, b) => a.mtime - b.mtime);
+
+    const conversations: ConversationHeaderNode[] = [];
+    let current: { anchor: ListItem; turns: ListItem[] } | null = null;
+    for (const c of sorted) {
+      const isContinuation = c.kind === "continuation";
+      if (!isContinuation) {
+        // anchor（或 kind 缺失 —— 旧文件向后兼容）→ 关闭上一个对话，开启新对话。
+        // anchor (or missing kind — backward compat) → close previous, start new.
+        if (current) conversations.push(getOrCreateConversation(key, current.anchor, current.turns));
+        current = { anchor: c, turns: [] };
+      } else {
+        // continuation → 追加到当前对话；孤儿续轮（理论上不会出现）当作 anchor 处理。
+        // continuation → append; orphan continuation (shouldn't happen) treated as anchor.
+        if (!current) current = { anchor: c, turns: [] };
+        else current.turns.push(c);
+      }
+    }
+    if (current) conversations.push(getOrCreateConversation(key, current.anchor, current.turns));
+
+    // 4. 对话按 endTime 降序（最近对话排最上）。
+    // 4. Conversations newest-first by endTime.
+    conversations.sort((a, b) => b.endTime - a.endTime);
+
+    // 5. Utility 桶按 mtime 升序。
+    // 5. Utility bucket oldest-first.
+    const sortedUtility = [...utility].sort((a, b) => a.mtime - b.mtime);
+
     let newest = 0;
     for (const c of captures) if (c.mtime > newest) newest = c.mtime;
-    sessions.push({
-      type: "session",
-      depth: 0,
-      key,
-      name: key,
-      captures,
-      newestMtime: newest,
-    });
+
+    sessions.push(
+      getOrCreateSession(key, conversations, sortedUtility, newest, captures.length)
+    );
   }
 
-  // 组间按最新 mtime desc，让最近的 session 排最上面。
-  // Sort sessions by newest mtime desc so the most recent is on top.
-  sessions.sort((a, b) => (b.newestMtime ?? 0) - (a.newestMtime ?? 0));
+  // session 间按最新 mtime 降序，让最近的 session 排最上面。
+  // Sessions newest-first so the most recent is on top.
+  sessions.sort((a, b) => b.newestMtime - a.newestMtime);
   return sessions;
 }
 
-// 模块级叶子缓存：相同 ListItem.name 且 ListItem 引用未变 → 复用同一个 TreeNode 对象。
-// 下游 TreeNodeRow 的 memo() 依赖这个引用稳定性来跳过未变行的重渲染。
-// Module-level leaf cache: same ListItem.name AND same ListItem reference → reuse the same TreeNode object.
-// Downstream TreeNodeRow's memo() relies on this identity stability to skip re-rendering unchanged rows.
-const leafCache = new Map<string, TreeNode>();
-
-// 把树展平成可见行的数组：跳过被折叠 session 的子节点。
-// Flatten the tree into the visible-rows array: skip children of collapsed sessions.
-// 今天子节点都是叶子；未来嵌套路径需要把内层循环改成递归遍历。
-// Today children are all leaves; future nested paths require turning the inner loop into a recursive walk.
+// 把树展平成可见行数组：跳过被折叠 session / conversation / utility 桶的子节点。
+// 每个子节点通过对应缓存拿到稳定引用，保住下游 memo。
+// Flatten the tree into visible rows: skip children of collapsed session / conversation /
+// utility bucket. Each child is resolved through its cache to preserve identity.
 export function flattenVisible(tree: TreeNode[], collapsedKeys: Set<string>): TreeNode[] {
   const out: TreeNode[] = [];
   for (const node of tree) {
     out.push(node);
-    if (node.type === "session" && !collapsedKeys.has(node.key) && node.captures) {
-      for (const c of node.captures) {
-        let leaf = leafCache.get(c.name);
-        // 只有当 ListItem 引用变了才重建 wrapper；否则复用上次的 TreeNode 对象。
-        // Rebuild the wrapper only when the ListItem reference changed; otherwise reuse the previous TreeNode.
-        if (!leaf || leaf.item !== c) {
-          leaf = { type: "leaf", depth: node.depth + 1, key: c.name, name: c.name, item: c };
-          leafCache.set(c.name, leaf);
+    if (node.type !== "session") continue;
+    if (collapsedKeys.has(node.key)) continue;
+
+    // 对话（最新在前）。
+    // Conversations (newest-first).
+    for (const conv of node.conversations) {
+      out.push(conv);
+      if (collapsedKeys.has(conv.key)) continue;
+      // 续轮叶子（最旧在前）。
+      // Turn leaves (oldest-first).
+      for (const turn of conv.turns) {
+        out.push(getOrCreateLeaf(turn, 2));
+      }
+    }
+
+    // Utility 桶（仅当非空）。
+    // Utility bucket (only when non-empty).
+    if (node.utilityBucket.length > 0) {
+      out.push(getOrCreateUtility(node.utilityKey, node.utilityBucket));
+      if (!collapsedKeys.has(node.utilityKey)) {
+        for (const u of node.utilityBucket) {
+          out.push(getOrCreateLeaf(u, 2));
         }
-        out.push(leaf);
       }
     }
   }
