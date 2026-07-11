@@ -169,6 +169,11 @@ const TreeNodeRow = memo(function TreeNodeRow({
     paddingRight: "24px",
   };
 
+  // STUB: Task 2 — renderer 尚未学习嵌套布局（depth-based indentation 对嵌套子代理）。
+  // Task 3 会增强渲染：嵌套缩进、divider 样式、子代理 ancestry 标记。
+  // STUB: Task 2 — renderer hasn't learned nested layout yet (depth-based indentation for
+  // nested subagents). Task 3 enhances rendering: nested indent, divider style, subagent ancestry.
+
   if (node.type === "session") {
     return (
       <button
@@ -219,6 +224,12 @@ const TreeNodeRow = memo(function TreeNodeRow({
         <span className="session-count">[{node.captures.length}]</span>
       </div>
     );
+  }
+
+  if (node.type === "divider") {
+    // 占位渲染：Task 3 会替换为带样式的压缩分隔符。
+    // Placeholder: Task 3 replaces with a styled compression divider.
+    return <div ref={measureRef} className="compression-divider" style={style} data-index={vIndex}>{node.label}</div>;
   }
 
   // leaf: continuation turn or utility capture

@@ -10,11 +10,12 @@ export interface SessionNode {
   depth: number;            // 0
   key: string;              // session key (directory prefix)
   name: string;             // session dirname
-  conversations: ConversationHeaderNode[]; // newest-first by endTime
+  conversations: ConversationHeaderNode[]; // top-level conversations, newest-first by endTime
+  nestedByParent: Map<string, ConversationHeaderNode[]>; // parent capture name → nested subagent conversations
   utilityBucket: ListItem[];               // utility-tagged captures, oldest-first
   utilityKey: string;       // `${key}#utility` — collapse key for the utility bucket
   newestMtime: number;      // for cross-session sort
-  captureCount: number;     // conversations + utility, for the header badge
+  captureCount: number;     // conversations + nested + utility, for the header badge
 }
 
 export interface ConversationHeaderNode {
@@ -44,7 +45,14 @@ export interface LeafNode {
   item: ListItem;
 }
 
-export type TreeNode = SessionNode | ConversationHeaderNode | UtilityBucketNode | LeafNode;
+export interface DividerNode {
+  type: "divider";
+  depth: number;            // matches the turn-leaf depth where the divider sits (2 for main thread)
+  key: string;              // `${captureName}#divider`
+  label: string;            // "context compressed"
+}
+
+export type TreeNode = SessionNode | ConversationHeaderNode | UtilityBucketNode | LeafNode | DividerNode;
 
 const UNGROUPED = "ungrouped";
 
@@ -56,6 +64,7 @@ const sessionCache = new Map<string, SessionNode>();
 const conversationCache = new Map<string, ConversationHeaderNode>();
 const leafCache = new Map<string, LeafNode>();
 const utilityCache = new Map<string, UtilityBucketNode>();
+const dividerCache = new Map<string, DividerNode>();
 
 function itemsEqual(a: ListItem[], b: ListItem[]): boolean {
   if (a.length !== b.length) return false;
@@ -75,16 +84,17 @@ function getOrCreateLeaf(item: ListItem, depth: number): LeafNode {
 function getOrCreateConversation(
   sessionKey: string,
   anchor: ListItem,
-  turns: ListItem[]
+  turns: ListItem[],
+  depth: number
 ): ConversationHeaderNode {
   const key = `${sessionKey}#${anchor.name}`;
   const cached = conversationCache.get(key);
-  if (cached && cached.anchorItem === anchor && itemsEqual(cached.turns, turns)) {
+  if (cached && cached.anchorItem === anchor && itemsEqual(cached.turns, turns) && cached.depth === depth) {
     return cached;
   }
   const conv: ConversationHeaderNode = {
     type: "conversation",
-    depth: 1,
+    depth,
     key,
     anchorItem: anchor,
     turns,
@@ -112,9 +122,19 @@ function getOrCreateUtility(key: string, captures: ListItem[]): UtilityBucketNod
   return bucket;
 }
 
+function getOrCreateDivider(captureName: string, depth: number, label: string): DividerNode {
+  const key = `${captureName}#divider`;
+  const cached = dividerCache.get(key);
+  if (cached && cached.depth === depth && cached.label === label) return cached;
+  const divider: DividerNode = { type: "divider", depth, key, label };
+  dividerCache.set(key, divider);
+  return divider;
+}
+
 function getOrCreateSession(
   key: string,
   conversations: ConversationHeaderNode[],
+  nestedByParent: Map<string, ConversationHeaderNode[]>,
   utilityBucket: ListItem[],
   newestMtime: number,
   captureCount: number
@@ -123,6 +143,7 @@ function getOrCreateSession(
   if (
     cached &&
     itemsEqualSessions(cached.conversations, conversations) &&
+    nestedMapsEqual(cached.nestedByParent, nestedByParent) &&
     itemsEqual(cached.utilityBucket, utilityBucket) &&
     cached.captureCount === captureCount
   ) {
@@ -134,6 +155,7 @@ function getOrCreateSession(
     key,
     name: key,
     conversations,
+    nestedByParent,
     utilityBucket,
     utilityKey: `${key}#utility`,
     newestMtime,
@@ -152,14 +174,30 @@ function itemsEqualSessions(a: ConversationHeaderNode[], b: ConversationHeaderNo
   return true;
 }
 
-// 把扁平的 ListItem[] 组织成 3 层树：session → conversation → turns，外加 utility 桶。
-// 同一 session 内：按 mtime 升序遍历，anchor 开新对话，continuation 追加；utility 单独入桶。
-// Organize a flat ListItem[] into a 3-level tree: session → conversation → turns, plus a
-// utility bucket. Within a session: walk oldest-first, anchor starts a new conversation,
-// continuation appends; utility captures go into a separate bucket.
+// nestedMapsEqual: 比较 nestedByParent 两个 Map —— 键相同 + 每个键下的对话数组引用一致。
+// nestedMapsEqual: compare two nestedByParent Maps — same keys + reference-identical conversation arrays.
+function nestedMapsEqual(
+  a: Map<string, ConversationHeaderNode[]>,
+  b: Map<string, ConversationHeaderNode[]>
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) {
+    const bv = b.get(k);
+    if (!bv || !itemsEqualSessions(v, bv)) return false;
+  }
+  return true;
+}
+
+// 把扁平的 ListItem[] 组织成树：session → conversation → turns，外加 utility 桶。
+// 同一 session 内：按 mtime 升序遍历，anchor 开新对话，continuation/compressed 追加；utility 单独入桶。
+// 带 parentId 的子代理对话在遍历后从顶层移入 nestedByParent，嵌套到对应的主代理 turn 下。
+// Organize a flat ListItem[] into a tree: session → conversation → turns, plus a utility bucket.
+// Within a session: walk oldest-first, anchor starts a new conversation, continuation/compressed
+// append; utility captures go into a separate bucket. Subagent conversations whose anchor has
+// parentId are moved from top-level into nestedByParent, nesting under the originating turn.
 export function buildTree(items: ListItem[]): TreeNode[] {
-  // 1. 按 session key 分桶（保留第一个 '/' 切分，兼容无 '/' 的裸文件名）。
-  // 1. Bucket by session key (split on first '/'; tolerate bare filenames).
+  // 1. 按 session key 分桶。
+  // 1. Bucket by session key.
   const sessionBuckets = new Map<string, ListItem[]>();
   for (const it of items) {
     const slashIdx = it.name.indexOf("/");
@@ -171,46 +209,78 @@ export function buildTree(items: ListItem[]): TreeNode[] {
 
   const sessions: SessionNode[] = [];
   for (const [key, captures] of sessionBuckets) {
-    // 2. 把 utility 单独拎出来，不参与对话分组。
-    // 2. Pull utility captures aside; they don't participate in conversation grouping.
+    // 2. 分离 utility。
+    // 2. Pull utility aside.
     const conversational = captures.filter((c) => c.tag !== "utility");
     const utility = captures.filter((c) => c.tag === "utility");
 
-    // 3. 对话用 capture 按 mtime 升序，便于按时间顺序遍历分组。
-    // 3. Conversational captures oldest-first so grouping walks in chronological order.
+    // 3. 对话用 capture 按 mtime 升序。
+    // 3. Conversational captures oldest-first.
     const sorted = [...conversational].sort((a, b) => a.mtime - b.mtime);
 
-    const conversations: ConversationHeaderNode[] = [];
+    // 4. 走 anchor/continuation/compressed 分组。
+    //    关键：continuation 和 compressed 都追加到当前对话；只有 anchor 开新对话。
+    // 4. Walk anchor/continuation/compressed grouping.
+    //    Key: both continuation and compressed append to the current conversation;
+    //    only anchor starts a new conversation.
+    const allConversations: ConversationHeaderNode[] = [];
     let current: { anchor: ListItem; turns: ListItem[] } | null = null;
     for (const c of sorted) {
-      const isContinuation = c.kind === "continuation";
-      if (!isContinuation) {
-        // anchor（或 kind 缺失 —— 旧文件向后兼容）→ 关闭上一个对话，开启新对话。
-        // anchor (or missing kind — backward compat) → close previous, start new.
-        if (current) conversations.push(getOrCreateConversation(key, current.anchor, current.turns));
+      const isAnchor = c.kind === "anchor" || c.kind === undefined;
+      if (isAnchor) {
+        if (current) allConversations.push(getOrCreateConversation(key, current.anchor, current.turns, 1));
         current = { anchor: c, turns: [] };
       } else {
-        // continuation → 追加到当前对话；孤儿续轮（理论上不会出现）当作 anchor 处理。
-        // continuation → append; orphan continuation (shouldn't happen) treated as anchor.
+        // continuation OR compressed → 都追加到当前对话。
+        // continuation OR compressed → both append to the current conversation.
         if (!current) current = { anchor: c, turns: [] };
         else current.turns.push(c);
       }
     }
-    if (current) conversations.push(getOrCreateConversation(key, current.anchor, current.turns));
+    if (current) allConversations.push(getOrCreateConversation(key, current.anchor, current.turns, 1));
 
-    // 4. 对话按 endTime 降序（最近对话排最上）。
-    // 4. Conversations newest-first by endTime.
-    conversations.sort((a, b) => b.endTime - a.endTime);
+    // 5. 把带 parentId 的子代理对话从顶层挪到 nestedByParent。
+    // 5. Move subagent conversations whose anchor has parentId out of top-level into nestedByParent.
+    const nestedByParent = new Map<string, ConversationHeaderNode[]>();
+    const topLevel: ConversationHeaderNode[] = [];
+    for (const conv of allConversations) {
+      const parentId = conv.anchorItem.parentId;
+      if (parentId) {
+        const arr = nestedByParent.get(parentId);
+        if (arr) arr.push(conv);
+        else nestedByParent.set(parentId, [conv]);
+      } else {
+        topLevel.push(conv);
+      }
+    }
 
-    // 5. Utility 桶按 mtime 升序。
-    // 5. Utility bucket oldest-first.
+    // 重建嵌套对话到正确深度（depth 3 = parent leaf depth 2 + 1）。
+    // Rebuild nested conversations at the correct depth (depth 3 = parent leaf depth 2 + 1).
+    const NESTED_DEPTH = 3;
+    const fixedNestedByParent = new Map<string, ConversationHeaderNode[]>();
+    for (const [parentId, arr] of nestedByParent) {
+      const fixed = arr.map((conv) =>
+        getOrCreateConversation(key, conv.anchorItem, conv.turns, NESTED_DEPTH)
+      );
+      fixedNestedByParent.set(parentId, fixed);
+    }
+
+    // 6. 顶层对话按 endTime 降序；nestedByParent 内每个键下按 startTime 升序（派发顺序）。
+    // 6. Top-level conversations newest-first by endTime; each nestedByParent bucket oldest-first (dispatch order).
+    topLevel.sort((a, b) => b.endTime - a.endTime);
+    for (const arr of fixedNestedByParent.values()) {
+      arr.sort((a, b) => a.startTime - b.startTime);
+    }
+
+    // 7. Utility 桶按 mtime 升序。
+    // 7. Utility bucket oldest-first.
     const sortedUtility = [...utility].sort((a, b) => a.mtime - b.mtime);
 
     let newest = 0;
     for (const c of captures) if (c.mtime > newest) newest = c.mtime;
 
     sessions.push(
-      getOrCreateSession(key, conversations, sortedUtility, newest, captures.length)
+      getOrCreateSession(key, topLevel, fixedNestedByParent, sortedUtility, newest, captures.length)
     );
   }
 
@@ -231,16 +301,12 @@ export function flattenVisible(tree: TreeNode[], collapsedKeys: Set<string>): Tr
     if (node.type !== "session") continue;
     if (collapsedKeys.has(node.key)) continue;
 
-    // 对话（最新在前）。
-    // Conversations (newest-first).
+    // 顶层对话（最新在前）。
+    // Top-level conversations (newest-first).
     for (const conv of node.conversations) {
       out.push(conv);
       if (collapsedKeys.has(conv.key)) continue;
-      // 续轮叶子（最旧在前）。
-      // Turn leaves (oldest-first).
-      for (const turn of conv.turns) {
-        out.push(getOrCreateLeaf(turn, 2));
-      }
+      emitTurns(out, conv, node.nestedByParent, collapsedKeys);
     }
 
     // Utility 桶（仅当非空）。
@@ -255,4 +321,39 @@ export function flattenVisible(tree: TreeNode[], collapsedKeys: Set<string>): Tr
     }
   }
   return out;
+}
+
+// emitTurns: 把一个对话的 turns 展开成 leaf 行；在 compressed turn 前插 divider；
+// 在派生了子代理的 turn 后插嵌套子代理对话。
+// emitTurns: expand a conversation's turns into leaf rows; insert a divider before
+// compressed turns; insert nested subagent conversations after a turn that spawned them.
+function emitTurns(
+  out: TreeNode[],
+  conv: ConversationHeaderNode,
+  nestedByParent: Map<string, ConversationHeaderNode[]>,
+  collapsedKeys: Set<string>
+): void {
+  const convDepth = conv.depth;
+  const leafDepth = convDepth + 1;
+  for (const turn of conv.turns) {
+    // compressed turn 前插一条 divider（深度与 leaf 一致）。
+    // Insert a divider before a compressed turn (same depth as the leaf).
+    if (turn.kind === "compressed") {
+      out.push(getOrCreateDivider(turn.name, leafDepth, "context compressed"));
+    }
+    out.push(getOrCreateLeaf(turn, leafDepth));
+
+    // 该 turn 派生了子代理？插嵌套对话（默认折叠）。
+    // Did this turn spawn subagents? Insert nested conversations (collapsed by default).
+    const nested = nestedByParent.get(turn.name);
+    if (nested) {
+      for (const subConv of nested) {
+        out.push(subConv);
+        if (collapsedKeys.has(subConv.key)) continue;
+        // 嵌套对话的 turns 深度 +1。
+        // Nested conversation's turns are one depth deeper.
+        emitTurns(out, subConv, nestedByParent, collapsedKeys);
+      }
+    }
+  }
 }
