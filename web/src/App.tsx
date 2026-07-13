@@ -61,11 +61,6 @@ export default function App() {
             <span className="dot" />
             Capture Inspector
           </div>
-          <h1>
-            Claude Code
-            <br />
-            <em>traffic archive</em>
-          </h1>
           <div className="sub" id="count">
             {items.length === 0
               ? "— scanning —"

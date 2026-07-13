@@ -39,6 +39,7 @@ Options:
   --port-mitmweb <n>    mitmweb Web UI port            (default 8081, auto-picks next free if busy)
   --port-viewer <n>     viewer HTTP port               (default 8090, auto-picks next free if busy)
   --captures <path>     captures output directory     (default ~/.claude-capture/captures)
+  --max-captures <n>    keep at most N capture files, pruning oldest  (default 500)
   --no-browser          do not auto-open the viewer in browser
   --no-mitmweb-browser  do not auto-open the mitmweb Web UI in browser
   --claude <bin>        CLI to launch & capture (default: claude, env: CLAUDE_CAPTURE_CLAUDE)
@@ -62,6 +63,7 @@ function parseArgs(argv) {
     portViewerExplicit: false,
     portMitmwebExplicit: false,
     captures: path.join(os.homedir(), ".claude-capture", "captures"),
+    maxCaptures: 500,
     openBrowser: true,
     openMitmwebBrowser: true,
     claudeArgs: [],
@@ -89,6 +91,8 @@ function parseArgs(argv) {
       opts.portMitmwebExplicit = true;
     } else if (a === "--captures") {
       opts.captures = path.resolve(argv[++i]);
+    } else if (a === "--max-captures") {
+      opts.maxCaptures = Number(argv[++i]);
     } else if (a === "--no-browser") {
       opts.openBrowser = false;
     } else if (a === "--no-mitmweb-browser") {
@@ -106,6 +110,8 @@ function parseArgs(argv) {
       opts.portMitmwebExplicit = true;
     } else if (a.startsWith("--captures=")) {
       opts.captures = path.resolve(a.slice("--captures=".length));
+    } else if (a.startsWith("--max-captures=")) {
+      opts.maxCaptures = Number(a.slice("--max-captures=".length));
     } else if (a.startsWith("--claude=")) {
       opts.claudeBin = a.slice("--claude=".length);
     } else {
@@ -373,6 +379,12 @@ async function main() {
 
   await fs.mkdir(opts.captures, { recursive: true });
 
+  // 校验抓取数量上限：非正整数会让 addon 的取模清理逻辑失效。
+  if (!Number.isInteger(opts.maxCaptures) || opts.maxCaptures < 1) {
+    process.stderr.write(`\n  fatal: --max-captures must be a positive integer (got ${opts.maxCaptures})\n\n`);
+    process.exit(1);
+  }
+
   // mitmweb 的 stderr 落盘到日志文件 —— addon 的 [addon] ERROR 之前被 stdio: ignore
   // 完全吞掉，导致 Windows 非 UTF-8 区域下 0 字节 captures 这种静默失败无法排查
   // （见 issue #1）。stdout 仍 ignore，避免和 claude 的 TUI 撕裂。
@@ -382,7 +394,7 @@ async function main() {
   fsSync.writeSync(mitmLogFd, `\n==== claude-capture ${new Date().toISOString()} ====\n`);
 
   process.stdout.write(BANNER + "\n");
-  process.stdout.write(`  captures : ${opts.captures}\n`);
+  process.stdout.write(`  captures : ${opts.captures}  (max ${opts.maxCaptures})\n`);
   process.stdout.write(`  mitm.log : ${mitmLogPath}\n`);
   process.stdout.write(`  proxy    : http://127.0.0.1:${opts.portProxy}  (mitmweb + addon)\n`);
   process.stdout.write(`  mitmweb  : http://127.0.0.1:${opts.portMitmweb}  (raw flow inspector)\n`);
@@ -415,6 +427,7 @@ async function main() {
       env: {
         ...process.env,
         CLAUDE_CAPTURE_DIR: opts.captures,
+        CLAUDE_CAPTURE_MAX: String(opts.maxCaptures),
         // 纵深防御：强制 mitmweb 子进程（含 addon.py）进入 UTF-8 模式，
         // 即使将来出现新的写盘点也能在 Windows 非 UTF-8 区域下安全工作。
         PYTHONUTF8: "1",

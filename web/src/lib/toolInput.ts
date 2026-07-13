@@ -64,6 +64,23 @@ function renderScalar(value: string, keyHint?: string): string {
   return `<div class="j-block-wrap"><pre class="j-block">${escapeHtml(value)}</pre></div>`;
 }
 
+// 选项数组判定：元素都是带 label + description 的对象（AskUserQuestion.options 形态）。
+// 用结构而非工具名判定，自动覆盖 label+description 形态的字段，无需 per-tool 配置。
+// Detect an options-shaped array: every element is an object with label + description
+// (the AskUserQuestion.options shape). Structural — not tool-named — so it generalizes
+// to any label+description field without per-tool config.
+function _isOptionArray(value: unknown[]): boolean {
+  if (value.length === 0) return false;
+  return value.every(
+    (el) =>
+      !!el &&
+      typeof el === "object" &&
+      !Array.isArray(el) &&
+      "label" in (el as object) &&
+      "description" in (el as object)
+  );
+}
+
 // 递归渲染工具输入。object → 字段行；array → 元素卡片；标量 → 内联或 markdown。
 // Recursively render a tool input. object → field rows; array → element cards;
 // scalars → inline or markdown depending on allowlist + signals.
@@ -80,6 +97,25 @@ export function renderToolInput(value: unknown, keyHint?: string): string {
   if (Array.isArray(value)) {
     if (value.length === 0) {
       return `<code class="j-inline">[]</code>`;
+    }
+    // 选项数组特例：元素形如 {label, description}（AskUserQuestion.options 等）。
+    // 渲染成横向 wrap 的 chip 卡片，而非默认的竖向编号行，对齐 Claude Code 原生 UI。
+    // Option-array special case: elements shaped like {label, description}
+    // (AskUserQuestion.options, etc.) render as a horizontal wrap of chips to
+    // mirror Claude Code's native UI instead of the default vertical numbered rows.
+    if (_isOptionArray(value)) {
+      const chips = value
+        .map((el) => {
+          const opt = el as { label?: unknown; description?: unknown };
+          const labelHtml = renderToolInput(opt.label ?? "", "label");
+          const descHtml =
+            opt.description == null
+              ? ""
+              : `<div class="input-option-desc">${renderToolInput(opt.description, "description")}</div>`;
+          return `<div class="input-option"><div class="input-option-label">${labelHtml}</div>${descHtml}</div>`;
+        })
+        .join("");
+      return `<div class="input-options">${chips}</div>`;
     }
     const items = value
       .map((el, i) => {

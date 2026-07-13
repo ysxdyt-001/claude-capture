@@ -39,6 +39,16 @@ def _matches(path: str) -> bool:
 # captures 目录：优先读环境变量，回退到 ./captures/
 CAPTURES_DIR = Path(os.environ.get("CLAUDE_CAPTURE_DIR", "./captures")).expanduser().resolve()
 
+# 抓取文件数量上限：超过则按 mtime 删除最旧的，避免磁盘累积导致 viewer 性能问题。
+# File-count cap: prune oldest by mtime beyond this, to keep the viewer snappy.
+MAX_CAPTURES = int(os.environ.get("CLAUDE_CAPTURE_MAX", "500"))
+
+# 每次写盘后都扫描清理：rglob + stat 在上千文件量级也仅几毫秒，
+# 且低于上限时立刻 return；相比「每 N 次」更直观，避免历史堆积滞留。
+# Prune after every write: rglob + stat over a few thousand files is a few ms,
+# and short-circuits when under cap. Simpler than every-N, avoids backlog lag.
+_write_counter = 0
+
 # Claude Code 在请求头里带的 session id（UUID），用来给 capture 分目录。
 SESSION_HEADER = "x-claude-code-session-id"
 
@@ -66,6 +76,23 @@ def _safe_json(text: str):
         return json.loads(text)
     except Exception:
         return text
+
+
+def _prune_captures() -> None:
+    """超过 MAX_CAPTURES 时按 mtime 删除最旧的 capture 文件（跨所有 session 子目录）。"""
+    files = list(CAPTURES_DIR.rglob("*.json"))
+    if len(files) <= MAX_CAPTURES:
+        return
+    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    removed = 0
+    for stale in files[MAX_CAPTURES:]:
+        try:
+            stale.unlink()
+            removed += 1
+        except OSError:
+            pass
+    if removed:
+        print(f"[addon] pruned {removed} old capture(s) (cap={MAX_CAPTURES})", flush=True)
 
 
 def _parse_sse(text: str):
@@ -147,5 +174,20 @@ def response(flow: http.HTTPFlow) -> None:
         )
 
         print(f"[addon] wrote {filename}  ({status}, {len(resp_text)} bytes)", flush=True)
+
+        # 每次写盘后清理，把总量压回 MAX_CAPTURES。
+        global _write_counter
+        _write_counter += 1
+        _prune_captures()
     except Exception as exc:
         print(f"[addon] ERROR on {flow.request.pretty_url}: {exc}", flush=True)
+
+
+# 模块加载时立即清理一次：把历史堆积（如 1800+ 旧文件）压到 MAX_CAPTURES 内，
+# 用户即使不产生新请求，重启 mitmweb 后也能立刻看到生效。
+# Prune once at import: collapses pre-existing backlog (e.g. 1800+ old files) down
+# to MAX_CAPTURES so the cap takes effect on restart even without new traffic.
+try:
+    _prune_captures()
+except Exception as _exc:
+    print(f"[addon] initial prune failed: {_exc}", flush=True)

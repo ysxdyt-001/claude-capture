@@ -143,19 +143,6 @@ body::after {
   }
 }
 
-.sidebar-header h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 32px;
-  letter-spacing: -0.015em;
-  color: var(--text);
-  line-height: 1.05;
-}
-.sidebar-header h1 em {
-  font-style: italic;
-  color: var(--sage-deep);
-}
 .sidebar-header .sub {
   color: var(--text-dim);
   font-size: 11px;
@@ -972,6 +959,14 @@ details.thinking-block .msg-thinking {
   border: none;
   border-radius: 0;
 }
+/* 工具输入里的长文本块（如 Write.content）封顶 + 滚动，避免撑爆整页。 */
+/* Cap height of long text blocks inside tool inputs (e.g. Write.content) so a
+   huge file body doesn't blow out the page — scroll inside instead. */
+.tool-pair-input pre.j-block,
+.tool-call .tool-input pre.j-block {
+  max-height: 400px;
+  overflow-y: auto;
+}
 /* ============ TOOL-INPUT FIELD ROWS ============ */
 .tool-pair-input .input-obj,
 .tool-call .tool-input .input-obj {
@@ -1016,6 +1011,45 @@ details.thinking-block .msg-thinking {
   border: 1px solid var(--line-faint);
   border-radius: 4px;
   padding: 10px 12px;
+}
+/* ============ ASK-USER-QUESTION 选项行（横向 wrap） ============ */
+/* 每个选项是 chip 卡片：label 为主、description 为副；窄容器自动换行。 */
+/* Option chips wrap horizontally; each chip has a label and dim description.
+   Falls back to a single column on narrow widths via flex-wrap. */
+.tool-pair-input .input-options,
+.tool-call .tool-input .input-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-pair-input .input-option,
+.tool-call .tool-input .input-option {
+  flex: 1 1 200px;
+  min-width: 0;
+  background: var(--paper-2);
+  border: 1px solid var(--line-faint);
+  border-left: 2px solid var(--sage);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+.tool-pair-input .input-option-label,
+.tool-call .tool-input .input-option-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+.tool-pair-input .input-option-desc,
+.tool-call .tool-input .input-option-desc {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.tool-pair-input .input-option-desc .msg-text,
+.tool-call .tool-input .input-option-desc .msg-text {
+  font-size: 11.5px;
 }
 /* markdown 块在工具输入里字号略小，贴合周围信息密度。 */
 /* Markdown blocks inside tool inputs render slightly smaller to match density. */
