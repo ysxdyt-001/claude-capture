@@ -17,6 +17,13 @@ const IS_MAC = process.platform === "darwin";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(__dirname, "..");
+// 读取 package.json 的 version。用 fs.readFileSync 而非 import assertion，
+// 因为后者语法在 Node 20.x 上变动过（assert → with），直接读文件最稳。
+// Read version from package.json. Using fs.readFileSync (not import assertion)
+// since the assertion syntax changed across Node 20.x versions.
+const PKG_VERSION = JSON.parse(
+  fsSync.readFileSync(path.join(PKG_ROOT, "package.json"), "utf8")
+).version;
 const ADDON_PATH = path.join(PKG_ROOT, "lib", "addon.py");
 // 静态资源目录：Vite 构建产物（web/ 源码经 npm run build 生成）。
 // Static assets dir: Vite build output (built from web/ source via npm run build).
@@ -44,6 +51,7 @@ Options:
   --no-mitmweb-browser  do not auto-open the mitmweb Web UI in browser
   --claude <bin>        CLI to launch & capture (default: claude, env: CLAUDE_CAPTURE_CLAUDE)
   -h, --help            show this help
+  -v, --version         print version and exit
 
 Anything after "--" is forwarded verbatim to claude.
 Examples:
@@ -79,6 +87,9 @@ function parseArgs(argv) {
       break;
     } else if (a === "-h" || a === "--help") {
       process.stdout.write(usage() + "\n");
+      process.exit(0);
+    } else if (a === "-v" || a === "--version") {
+      process.stdout.write(`claude-capture ${PKG_VERSION}\n`);
       process.exit(0);
     } else if (a === "--port-proxy") {
       opts.portProxy = Number(argv[++i]);
