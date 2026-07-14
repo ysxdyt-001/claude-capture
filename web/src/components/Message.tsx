@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { escapeHtml } from "../lib/format";
 import { highlightJSON } from "../lib/json";
 import { smartRender } from "../lib/markdown";
@@ -58,19 +58,30 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
           ? "system"
           : "tool";
 
-  // 缓存渲染产物：按 message.content 与可选 blocks 的序列化结果作为 key，
-  // 同一消息在组件生命周期内只构建一次 HTML。
-  // Cache rendered output: key on the serialized content + optional blocks so
-  // the same message builds its HTML once for the component's lifetime.
-  const bodyBlocks = useMemo<{
-    html: string;
-    standaloneToolResults: ToolResultBlock[];
-  }>(() => {
-    const out = { html: "", standaloneToolResults: [] as ToolResultBlock[] };
+  // 仅抽取 tool_result 块（廉价、无 smartRender 调用）。这部分在 MessageCollapse 之外
+  // 渲染，必须提前可用。
+  // Extract tool_result blocks only (cheap, no smartRender). These render as
+  // siblings to MessageCollapse and must be available up front.
+  const standaloneToolResults = useMemo<ToolResultBlock[]>(() => {
+    if (typeof message.content !== "string" && Array.isArray(message.content)) {
+      const src = blocks ?? (message.content as ContentBlock[]);
+      return src.filter((b): b is ToolResultBlock => b?.type === "tool_result");
+    }
+    return [];
+  }, [message, blocks]);
+
+  // 构建完整 HTML：仅由 MessageCollapse 在快路径（小消息）或首次展开（大消息）时调用。
+  // 绝不在 MessageInner 自己的渲染阶段执行 —— 这是 Layer B 延迟渲染承诺的关键。
+  // Build full HTML: invoked ONLY by MessageCollapse, either in its fast path
+  // (small messages) or on first expand (large messages). Never call this
+  // during MessageInner's own render — that is the entirety of Layer B's
+  // lazy-render promise.
+  const buildFullHtml = useCallback((): string => {
+    let html = "";
 
     if (typeof message.content === "string") {
-      out.html = `<div class="msg-text">${smartRender(message.content)}</div>`;
-      return out;
+      html = `<div class="msg-text">${smartRender(message.content)}</div>`;
+      return html;
     }
 
     const source =
@@ -84,37 +95,27 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
           const text = (b as { thinking?: string }).thinking || "";
           const words = (text.match(/\S+/g) || []).length;
           if (words) {
-            out.html += `<details class="thinking-block">
+            html += `<details class="thinking-block">
     <summary><span class="msg-role">thinking · ${words} words</span></summary>
     <div class="msg-thinking">${smartRender(text)}</div>
   </details>`;
           }
         } else if (b.type === "text") {
-          out.html += `<div class="msg-text">${smartRender(
-            (b as { text?: string }).text || "",
-          )}</div>`;
-        } else if (b.type === "tool_result") {
-          out.standaloneToolResults.push(b as ToolResultBlock);
-        } else {
-          out.html += renderBlockHtml(b, role);
+          html += `<div class="msg-text">${smartRender((b as { text?: string }).text || "")}</div>`;
+        } else if (b.type !== "tool_result") {
+          html += renderBlockHtml(b, role);
         }
+        // tool_result handled by standaloneToolResults; skip here.
       }
-      return out;
+      if (html === "") {
+        // tool_result-only message with no prose: fall back to the no-content placeholder.
+        return '<div class="msg-text" style="color:var(--text-faint);font-style:italic">— no textual content —</div>';
+      }
+      return html;
     }
 
-    out.html = `<pre class="json">${escapeHtml(JSON.stringify(message.content, null, 2))}</pre>`;
-    return out;
+    return `<pre class="json">${escapeHtml(JSON.stringify(message.content, null, 2))}</pre>`;
   }, [message, blocks, role]);
-
-  // 空内容占位符：通过独立 memo 计算，避免直接修改已缓存的 bodyBlocks。
-  // Empty-state placeholder: computed via its own memo to avoid mutating the
-  // already-memoized bodyBlocks object during render (React forbids that).
-  const effectiveHtml = useMemo(() => {
-    if (bodyBlocks.html === "" && bodyBlocks.standaloneToolResults.length === 0) {
-      return `<div class="msg-text" style="color:var(--text-faint);font-style:italic">— no textual content —</div>`;
-    }
-    return bodyBlocks.html;
-  }, [bodyBlocks]);
 
   // 提取原始文本供 MessageCollapse 做廉价大小判断。字符串内容直接用；
   // 块数组则按顺序拼接 text/thinking/tool_use/tool_result 块的文本。
@@ -140,16 +141,28 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
       .join("\n");
   }, [message, blocks]);
 
-  // 预览只取前若干行，渲染开销与消息大小无关。
-  // Preview takes only the first few lines; render cost is independent of
-  // overall message size.
-  const previewHtml = useMemo(() => {
+  // 预览渲染器：取前 6 行做 smartRender。仅由 MessageCollapse 在折叠分支中调用。
+  // Preview renderer: smartRender the first 6 lines. Called only by
+  // MessageCollapse in its collapsed branch.
+  const buildPreviewHtml = useCallback((): string => {
     const lines = rawText.split("\n", 6);
     return smartRender(lines.join("\n"));
   }, [rawText]);
 
   const tag = message.fromSSE ? `${role} · from SSE` : role;
 
+  // ⚠️ MessageCollapse 的延迟渲染依赖 MessageInner 自身的 React.memo：
+  //    - 小消息走快路径，buildFullHtml 立即被调用一次（等价于原来的同步渲染）。
+  //    - 大消息只在用户点击展开时才调用 buildFullHtml。
+  //    若移除 MessageInner 的 memo，每次父组件重渲染都会重新挂载/调用 buildFullHtml，
+  //    Layer B 的延迟承诺将失效。修改前请三思。
+  // ⚠️ MessageCollapse's lazy-render depends on MessageInner's own React.memo:
+  //    - small messages hit the fast path, buildFullHtml is called once
+  //      (equivalent to the old eager render).
+  //    - large messages only call buildFullHtml on first user-initiated expand.
+  //    If MessageInner's memo is removed, every parent rerender will re-invoke
+  //    buildFullHtml and Layer B's lazy promise is void. Think twice before
+  //    removing the memo.
   return (
     <div className={`msg ${cls}`}>
       {idx != null && <span className="turn-num">{String(idx).padStart(2, "0")}</span>}
@@ -157,10 +170,10 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
       <div className="msg-body">
         <MessageCollapse
           rawText={rawText}
-          renderPreview={() => previewHtml}
-          renderFull={() => effectiveHtml}
+          renderPreview={buildPreviewHtml}
+          renderFull={buildFullHtml}
         />
-        {bodyBlocks.standaloneToolResults.map((tr, i) => (
+        {standaloneToolResults.map((tr, i) => (
           <ToolResult key={i} toolResult={tr} variant="standalone" />
         ))}
       </div>
