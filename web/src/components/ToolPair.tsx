@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { escapeHtml } from "../lib/format";
 import { renderToolInput } from "../lib/toolInput";
 import type { ToolResultBlock, ToolUseBlock } from "../types";
@@ -8,7 +9,7 @@ interface ToolPairProps {
   toolResult: ToolResultBlock | null;
 }
 
-export default function ToolPair({ toolUse, toolResult }: ToolPairProps) {
+function ToolPairInner({ toolUse, toolResult }: ToolPairProps) {
   // 工具输入按字段递归渲染：allowlist 中的散文字段走 markdown，其余保持 JSON/内联。
   // Tool input renders recursively: prose fields in the allowlist go through
   // markdown; structural fields stay as JSON or inline code.
@@ -34,3 +35,5 @@ export default function ToolPair({ toolUse, toolResult }: ToolPairProps) {
     </div>
   );
 }
+
+export default memo(ToolPairInner);

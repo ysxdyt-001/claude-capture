@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { escapeHtml } from "../lib/format";
 import { highlightJSON } from "../lib/json";
 import { smartRender } from "../lib/markdown";
@@ -45,7 +46,7 @@ function renderBlockHtml(b: ContentBlock, _role: string): string {
   return `<pre class="json">${escapeHtml(JSON.stringify(b, null, 2))}</pre>`;
 }
 
-export default function Message({ message, idx, blocks }: MessageProps) {
+function MessageInner({ message, idx, blocks }: MessageProps) {
   const role = message.role;
   const cls =
     role === "user"
@@ -139,3 +140,8 @@ export function SystemMessage({ message }: { message: MessageType }) {
     </details>
   );
 }
+
+// 仅在 message/blocks/idx 变化时重渲染，避开 3 秒轮询引发的整树重渲染。
+// Only rerender when message/blocks/idx change, sidestepping the 3s poll
+// cascade that would otherwise rebuild the entire conversation subtree.
+export default memo(MessageInner);

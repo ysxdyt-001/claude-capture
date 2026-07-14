@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { renderCodeFile } from "../lib/code";
 import { escapeHtml } from "../lib/format";
 import { highlightJSON } from "../lib/json";
@@ -54,7 +55,7 @@ function renderToolResultBody(toolResult: ToolResultBlock, toolUse?: ToolUseBloc
   return renderContentSegments(toolResult.content);
 }
 
-export default function ToolResult({ toolResult, variant, toolUse }: ToolResultProps) {
+function ToolResultInner({ toolResult, variant, toolUse }: ToolResultProps) {
   const isErr = !!toolResult.is_error;
   const bodyHtml = renderToolResultBody(toolResult, toolUse);
   const lineGuess = (bodyHtml.match(/\n/g) || []).length;
@@ -91,3 +92,5 @@ export default function ToolResult({ toolResult, variant, toolUse }: ToolResultP
     </div>
   );
 }
+
+export default memo(ToolResultInner);
