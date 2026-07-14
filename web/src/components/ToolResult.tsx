@@ -59,7 +59,9 @@ function ToolResultInner({ toolResult, variant, toolUse }: ToolResultProps) {
   const isErr = !!toolResult.is_error;
   const bodyHtml = renderToolResultBody(toolResult, toolUse);
   const lineGuess = (bodyHtml.match(/\n/g) || []).length;
-  const shouldCollapse = bodyHtml.length > 1000 || lineGuess > 12;
+  // 阈值与 MessageCollapse 对齐：只有真正大的结果才折叠。
+  // Threshold aligned with MessageCollapse: only genuinely large results collapse.
+  const shouldCollapse = bodyHtml.length > 8000 || lineGuess > 100;
 
   if (variant === "pair") {
     return (
