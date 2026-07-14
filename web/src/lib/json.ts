@@ -1,6 +1,12 @@
 import { escapeHtml } from "./format";
 
+// 廉价预筛：不以 { 或 [ 开头的字符串绝不可能是 JSON，直接返回 false，
+// 避免对大段 markdown 触发 JSON.parse 的抛错/捕获开销。
+// Cheap pre-filter: anything not starting with { or [ cannot be JSON.
+// Skipping JSON.parse here avoids a throw/catch on every large markdown blob.
 export function looksLikeJSON(s: string): boolean {
+  const head = s.trimStart()[0];
+  if (head !== "{" && head !== "[") return false;
   try {
     JSON.parse(s);
     return true;
