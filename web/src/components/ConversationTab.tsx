@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { buildConversationItems } from "../lib/conversation";
 import { rebuildAssistantFromSSE } from "../lib/sse";
 import type { Capture, Message as MessageType } from "../types";
@@ -33,40 +33,49 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
   const req = capture.request?.body || {};
   const messages = req.messages || [];
   const sse = capture.response?.sse_events || [];
-  const rebuiltAssistant = rebuildAssistantFromSSE(sse);
+  // 仅在 SSE 事件列表变化时重建 assistant 回复，避免每次重渲染（含切换过滤chip）都跑一遍。
+  // Rebuild the assistant reply only when the SSE event list changes, so
+  // filter toggles and parent rerenders don't re-run this.
+  const rebuiltAssistant = useMemo(() => rebuildAssistantFromSSE(sse), [sse]);
 
-  // 构建时间线：system → 请求消息 → SSE 重建的 assistant 回复。
-  // Build the chronological thread: system → request messages → SSE reply.
-  const all: MessageType[] = [];
-  if (req.system) {
-    // system 可能是字符串，也可能是 {type:"text", text:"..."} 块数组。
-    // 数组情形下抽出各块 .text 并拼接，保证后续按 markdown 渲染而非 JSON 转储。
-    // system may be a string or an array of {type:"text", text:"..."} blocks.
-    // For arrays, pull out each block's .text and join so it renders as markdown,
-    // not as an escaped JSON dump.
-    const sys =
-      typeof req.system === "string"
-        ? req.system
-        : Array.isArray(req.system)
-          ? (req.system as Array<{ text?: string }>)
-              .map((b) => b?.text ?? "")
-              .filter(Boolean)
-              .join("\n\n")
-          : JSON.stringify(req.system, null, 2);
-    all.push({ role: "system", content: sys });
-  }
-  for (const m of messages) all.push(m);
-  if (rebuiltAssistant) {
-    all.push({
-      role: "assistant",
-      content: rebuiltAssistant,
-      fromSSE: true,
-    });
-  }
+  // 构建时间线 + 渲染项：仅在请求体或重建结果变化时重算，filter 切换不会触发。
+  // Build the chronological thread and the render-item list. Recompute only
+  // when the request body or the rebuilt assistant changes — not on filter toggles.
+  const { items, toolPairCount, textTurnCount } = useMemo(() => {
+    const list: MessageType[] = [];
+    if (req.system) {
+      // system 可能是字符串，也可能是 {type:"text", text:"..."} 块数组。
+      // 数组情形下抽出各块 .text 并拼接，保证后续按 markdown 渲染而非 JSON 转储。
+      // system may be a string or an array of {type:"text", text:"..."} blocks.
+      // For arrays, pull out each block's .text and join so it renders as markdown,
+      // not as an escaped JSON dump.
+      const sys =
+        typeof req.system === "string"
+          ? req.system
+          : Array.isArray(req.system)
+            ? (req.system as Array<{ text?: string }>)
+                .map((b) => b?.text ?? "")
+                .filter(Boolean)
+                .join("\n\n")
+            : JSON.stringify(req.system, null, 2);
+      list.push({ role: "system", content: sys });
+    }
+    for (const m of messages) list.push(m);
+    if (rebuiltAssistant) {
+      list.push({
+        role: "assistant",
+        content: rebuiltAssistant,
+        fromSSE: true,
+      });
+    }
 
-  const items = buildConversationItems(all);
-  const toolPairCount = items.filter((i) => i.kind === "tool-pair").length;
-  const textTurnCount = items.filter((i) => i.kind !== "tool-pair" && i.kind !== "system").length;
+    const built = buildConversationItems(list);
+    const toolCount = built.filter((i) => i.kind === "tool-pair").length;
+    const textCount = built.filter(
+      (i) => i.kind !== "tool-pair" && i.kind !== "system",
+    ).length;
+    return { items: built, toolPairCount: toolCount, textTurnCount: textCount };
+  }, [req, rebuiltAssistant]);
 
   // 过滤状态：默认全部开启。useState 保留在同一组件实例内，切换抓包时不重置。
   // Filter state: all on by default. Held in useState so switching captures
