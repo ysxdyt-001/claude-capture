@@ -1,11 +1,11 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { escapeHtml } from "../lib/format";
 import { highlightJSON } from "../lib/json";
 import { smartRender } from "../lib/markdown";
+import { renderToolInput } from "../lib/toolInput";
 import type { ContentBlock, Message as MessageType } from "../types";
 import type { ToolResultBlock, ToolUseBlock } from "../types";
 import ToolResult from "./ToolResult";
-import { renderToolInput } from "../lib/toolInput";
 
 interface MessageProps {
   message: MessageType;
@@ -57,51 +57,63 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
           ? "system"
           : "tool";
 
-  const bodyBlocks: { html: string; standaloneToolResults: ToolResultBlock[] } = {
-    html: "",
-    standaloneToolResults: [],
-  };
+  // 缓存渲染产物：按 message.content 与可选 blocks 的序列化结果作为 key，
+  // 同一消息在组件生命周期内只构建一次 HTML。
+  // Cache rendered output: key on the serialized content + optional blocks so
+  // the same message builds its HTML once for the component's lifetime.
+  const bodyBlocks = useMemo<{
+    html: string;
+    standaloneToolResults: ToolResultBlock[];
+  }>(() => {
+    const out = { html: "", standaloneToolResults: [] as ToolResultBlock[] };
 
-  if (typeof message.content === "string") {
-    bodyBlocks.html = `<div class="msg-text">${smartRender(message.content)}</div>`;
-  } else if (
-    blocks ??
-    (Array.isArray(message.content) ? (message.content as ContentBlock[]) : null)
-  ) {
-    // 优先使用调用方传入的 blocks（已过滤 tool_use），否则回退到 message.content。
-    // Prefer caller-supplied blocks (tool_use already filtered out); fall back to message.content.
-    const source = blocks ?? (message.content as ContentBlock[]);
-    for (const b of source) {
-      if (b.type === "thinking") {
-        // Collapsible <details> — faithful port of vanilla renderThinkingBlock.
-        const text = (b as { thinking?: string }).thinking || "";
-        const words = (text.match(/\S+/g) || []).length;
-        if (words) {
-          bodyBlocks.html += `<details class="thinking-block">
+    if (typeof message.content === "string") {
+      out.html = `<div class="msg-text">${smartRender(message.content)}</div>`;
+      return out;
+    }
+
+    const source =
+      blocks ?? (Array.isArray(message.content) ? (message.content as ContentBlock[]) : null);
+
+    if (source) {
+      // 优先使用调用方传入的 blocks（已过滤 tool_use），否则回退到 message.content。
+      // Prefer caller-supplied blocks (tool_use already filtered out); fall back to message.content.
+      for (const b of source) {
+        if (b.type === "thinking") {
+          const text = (b as { thinking?: string }).thinking || "";
+          const words = (text.match(/\S+/g) || []).length;
+          if (words) {
+            out.html += `<details class="thinking-block">
     <summary><span class="msg-role">thinking · ${words} words</span></summary>
     <div class="msg-thinking">${smartRender(text)}</div>
   </details>`;
+          }
+        } else if (b.type === "text") {
+          out.html += `<div class="msg-text">${smartRender(
+            (b as { text?: string }).text || "",
+          )}</div>`;
+        } else if (b.type === "tool_result") {
+          out.standaloneToolResults.push(b as ToolResultBlock);
+        } else {
+          out.html += renderBlockHtml(b, role);
         }
-      } else if (b.type === "text") {
-        bodyBlocks.html += `<div class="msg-text">${smartRender(
-          (b as { text?: string }).text || "",
-        )}</div>`;
-      } else if (b.type === "tool_result") {
-        bodyBlocks.standaloneToolResults.push(b as ToolResultBlock);
-      } else {
-        bodyBlocks.html += renderBlockHtml(b, role);
       }
+      return out;
     }
-  } else {
-    bodyBlocks.html = `<pre class="json">${escapeHtml(
-      JSON.stringify(message.content, null, 2),
-    )}</pre>`;
-  }
 
-  if (bodyBlocks.html === "" && bodyBlocks.standaloneToolResults.length === 0) {
-    bodyBlocks.html =
-      '<div class="msg-text" style="color:var(--text-faint);font-style:italic">— no textual content —</div>';
-  }
+    out.html = `<pre class="json">${escapeHtml(JSON.stringify(message.content, null, 2))}</pre>`;
+    return out;
+  }, [message, blocks, role]);
+
+  // 空内容占位符：通过独立 memo 计算，避免直接修改已缓存的 bodyBlocks。
+  // Empty-state placeholder: computed via its own memo to avoid mutating the
+  // already-memoized bodyBlocks object during render (React forbids that).
+  const effectiveHtml = useMemo(() => {
+    if (bodyBlocks.html === "" && bodyBlocks.standaloneToolResults.length === 0) {
+      return `<div class="msg-text" style="color:var(--text-faint);font-style:italic">— no textual content —</div>`;
+    }
+    return bodyBlocks.html;
+  }, [bodyBlocks]);
 
   const tag = message.fromSSE ? `${role} · from SSE` : role;
 
@@ -110,7 +122,7 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
       {idx != null && <span className="turn-num">{String(idx).padStart(2, "0")}</span>}
       <div className="msg-role" dangerouslySetInnerHTML={{ __html: escapeHtml(tag) }} />
       <div className="msg-body">
-        {bodyBlocks.html && <div dangerouslySetInnerHTML={{ __html: bodyBlocks.html }} />}
+        {effectiveHtml && <div dangerouslySetInnerHTML={{ __html: effectiveHtml }} />}
         {bodyBlocks.standaloneToolResults.map((tr, i) => (
           <ToolResult key={i} toolResult={tr} variant="standalone" />
         ))}
