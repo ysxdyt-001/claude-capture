@@ -31,7 +31,6 @@ function bucketOf(item: { kind: string }): Bucket | null {
 
 export default function ConversationTab({ capture }: ConversationTabProps) {
   const req = capture.request?.body || {};
-  const messages = req.messages || [];
   const sse = capture.response?.sse_events || [];
   // 仅在 SSE 事件列表变化时重建 assistant 回复，避免每次重渲染（含切换过滤chip）都跑一遍。
   // Rebuild the assistant reply only when the SSE event list changes, so
@@ -60,7 +59,7 @@ export default function ConversationTab({ capture }: ConversationTabProps) {
             : JSON.stringify(req.system, null, 2);
       list.push({ role: "system", content: sys });
     }
-    for (const m of messages) list.push(m);
+    for (const m of req.messages || []) list.push(m);
     if (rebuiltAssistant) {
       list.push({
         role: "assistant",
