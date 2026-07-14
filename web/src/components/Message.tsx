@@ -5,6 +5,7 @@ import { smartRender } from "../lib/markdown";
 import { renderToolInput } from "../lib/toolInput";
 import type { ContentBlock, Message as MessageType } from "../types";
 import type { ToolResultBlock, ToolUseBlock } from "../types";
+import MessageCollapse from "./MessageCollapse";
 import ToolResult from "./ToolResult";
 
 interface MessageProps {
@@ -115,6 +116,38 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
     return bodyBlocks.html;
   }, [bodyBlocks]);
 
+  // 提取原始文本供 MessageCollapse 做廉价大小判断。字符串内容直接用；
+  // 块数组则按顺序拼接 text/thinking/tool_use/tool_result 块的文本。
+  // Extract raw text for MessageCollapse's cheap size check. String content
+  // is used as-is; block arrays are concatenated from
+  // text/thinking/tool_use/tool_result blocks.
+  const rawText = useMemo(() => {
+    if (typeof message.content === "string") return message.content;
+    const src = blocks ?? (Array.isArray(message.content) ? message.content : []);
+    return (src as ContentBlock[])
+      .map((b) => {
+        if (b.type === "text") return (b as { text?: string }).text || "";
+        if (b.type === "thinking") return (b as { thinking?: string }).thinking || "";
+        if (b.type === "tool_use") {
+          return JSON.stringify((b as ToolUseBlock).input ?? {});
+        }
+        if (b.type === "tool_result") {
+          const c = (b as ToolResultBlock).content;
+          return typeof c === "string" ? c : JSON.stringify(c ?? "");
+        }
+        return "";
+      })
+      .join("\n");
+  }, [message, blocks]);
+
+  // 预览只取前若干行，渲染开销与消息大小无关。
+  // Preview takes only the first few lines; render cost is independent of
+  // overall message size.
+  const previewHtml = useMemo(() => {
+    const lines = rawText.split("\n", 6);
+    return smartRender(lines.join("\n"));
+  }, [rawText]);
+
   const tag = message.fromSSE ? `${role} · from SSE` : role;
 
   return (
@@ -122,7 +155,11 @@ function MessageInner({ message, idx, blocks }: MessageProps) {
       {idx != null && <span className="turn-num">{String(idx).padStart(2, "0")}</span>}
       <div className="msg-role" dangerouslySetInnerHTML={{ __html: escapeHtml(tag) }} />
       <div className="msg-body">
-        {effectiveHtml && <div dangerouslySetInnerHTML={{ __html: effectiveHtml }} />}
+        <MessageCollapse
+          rawText={rawText}
+          renderPreview={() => previewHtml}
+          renderFull={() => effectiveHtml}
+        />
         {bodyBlocks.standaloneToolResults.map((tr, i) => (
           <ToolResult key={i} toolResult={tr} variant="standalone" />
         ))}
