@@ -1482,3 +1482,47 @@ details summary:hover {
   background: var(--sage-bright);
   opacity: 0.6;
 }
+
+/* ============ MESSAGE COLLAPSE (lazy full-render) ============ */
+/* 长消息折叠：预览 + 渐隐遮罩 + 展开按钮。 */
+/* Long-message collapse: preview + faded mask + expand button. */
+.msg-collapse {
+  position: relative;
+  border-left: 2px solid var(--line-2);
+  margin: 4px 0;
+}
+
+.msg-collapse-preview {
+  max-height: 9em;
+  overflow: hidden;
+  position: relative;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0 6em, transparent 9em);
+  mask-image: linear-gradient(to bottom, #000 0 6em, transparent 9em);
+}
+
+.msg-collapse-full {
+  /* 展开后内容自然撑开。 */
+  /* Expanded content lays out at natural height. */
+}
+
+.msg-collapse-toggle {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 6px 10px;
+  margin-top: 4px;
+  background: var(--panel-2);
+  color: var(--text-dim);
+  border: none;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.msg-collapse-toggle:hover {
+  color: var(--text);
+  background: var(--hover);
+}
