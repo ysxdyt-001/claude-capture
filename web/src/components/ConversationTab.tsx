@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { buildConversationItems } from "../lib/conversation";
 import { rebuildAssistantFromSSE } from "../lib/sse";
+import { rebuildAssistantFromOpenAISSE } from "../lib/openai";
 import type { Capture, Message as MessageType } from "../types";
 import Message, { SystemMessage } from "./Message";
 import ToolPair from "./ToolPair";
@@ -32,10 +33,15 @@ function bucketOf(item: { kind: string }): Bucket | null {
 export default function ConversationTab({ capture }: ConversationTabProps) {
   const req = capture.request?.body || {};
   const sse = capture.response?.sse_events || [];
-  // 仅在 SSE 事件列表变化时重建 assistant 回复，避免每次重渲染（含切换过滤chip）都跑一遍。
-  // Rebuild the assistant reply only when the SSE event list changes, so
-  // filter toggles and parent rerenders don't re-run this.
-  const rebuiltAssistant = useMemo(() => rebuildAssistantFromSSE(sse), [sse]);
+  // OpenAI 与 Anthropic 用不同的 SSE 重建器，输出都是 ContentBlock[]。
+  // Both rebuilders return ContentBlock[]; branch on _format.
+  const rebuiltAssistant = useMemo(
+    () =>
+      capture._format === "openai"
+        ? rebuildAssistantFromOpenAISSE(sse)
+        : rebuildAssistantFromSSE(sse),
+    [sse, capture._format],
+  );
 
   // 构建时间线 + 渲染项：仅在请求体或重建结果变化时重算，filter 切换不会触发。
   // Build the chronological thread and the render-item list. Recompute only
