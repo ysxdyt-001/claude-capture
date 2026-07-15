@@ -321,3 +321,78 @@ export function rebuildAssistantFromOpenAISSE(
   if (blocks.length === 0) return null;
   return blocks;
 }
+
+/**
+ * 非流式响应：choices[0].message 翻译成 ContentBlock[]，注入到 capture 上一个
+ * 便于 ConversationTab 复用 Anthropic 路径的位置。
+ *
+ * 实现上我们把翻译结果塞进 response._openaiRebuilt，ConversationTab 不需要改
+ * （它走 SSE 路径；非流式 OpenAI 响应没有 sse_events，所以 ConversationTab 看到
+ * 没有 SSE 时会落到 "no assistant reply" —— 为避免这个，normalizeOpenAICapture
+ * 把非流式翻译结果写进一个合成 SSE 事件，让 rebuildAssistantFromOpenAISSE 能消费）。
+ *
+ * Non-streaming response: translate choices[0].message into ContentBlock[].
+ * To let ConversationTab / ResponseTab reuse the SSE rebuild path, we synthesize a
+ * single SSE event whose data.choices[0].delta carries the full message — then
+ * rebuildAssistantFromOpenAISSE consumes it uniformly.
+ */
+function translateNonStreamingBody(body: unknown): { sse_events?: SseEvent[] } {
+  if (!body || typeof body !== "object") return {};
+  const b = body as Record<string, unknown>;
+  const choices = b.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return {};
+  const choice0 = choices[0] as Record<string, unknown> | undefined;
+  const msg = choice0?.message as Record<string, unknown> | undefined;
+  if (!msg) return {};
+
+  // 合成一条 SSE 事件：delta == message 的全部字段。
+  // rebuildAssistantFromOpenAISSE 会从 delta.content / delta.tool_calls 重建。
+  // Synthesize one SSE event: delta == the whole message object.
+  // rebuildAssistantFromOpenAISSE then reads delta.content / delta.tool_calls.
+  const delta: Record<string, unknown> = {};
+  if (typeof msg.content === "string") delta.content = msg.content;
+  if (Array.isArray(msg.tool_calls)) delta.tool_calls = msg.tool_calls;
+
+  return {
+    sse_events: [
+      {
+        event: undefined,
+        data: { choices: [{ index: 0, delta }] },
+      },
+    ],
+  };
+}
+
+/**
+ * 顶层归一化：翻译请求体；若响应非流式且有 choices[]，合成 SSE 事件以复用流式路径。
+ * 不修改原始 body —— ResponseTab 的 "Response body" 面板仍显示原始 choices 结构。
+ *
+ * Top-level normalizer: translate the request body; if the response is non-streaming
+ * with choices[], synthesize an SSE event to reuse the streaming rebuild path.
+ * The original body is preserved so ResponseTab's "Response body" panel is unaffected.
+ */
+export function normalizeOpenAICapture(capture: Capture): Capture {
+  const next: Capture = { ...capture, _format: "openai" };
+
+  if (capture.request) {
+    next.request = {
+      ...capture.request,
+      body: capture.request.body
+        ? translateOpenAIRequest(capture.request.body)
+        : capture.request.body,
+    };
+  }
+
+  if (capture.response) {
+    const sse = capture.response.sse_events;
+    const hasSse = Array.isArray(sse) && sse.length > 0;
+    if (!hasSse) {
+      const synth = translateNonStreamingBody(capture.response.body);
+      if (synth.sse_events) {
+        next.response = { ...capture.response, sse_events: synth.sse_events };
+      }
+    }
+  }
+
+  return next;
+}
