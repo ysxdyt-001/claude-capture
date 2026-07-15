@@ -248,7 +248,6 @@ export function rebuildAssistantFromOpenAISSE(
   let textBuf = "";
   let textSeen = false;
   const tcByIndex = new Map<number, _StreamingToolCall>();
-  const order: number[] = [];
   let seq = 0;
 
   for (const ev of events) {
@@ -284,7 +283,6 @@ export function rebuildAssistantFromOpenAISSE(
         if (!entry) {
           entry = { index: idx, argsBuf: "", firstSeen: seq++ };
           tcByIndex.set(idx, entry);
-          order.push(idx);
         }
         const fn = tc.function as Record<string, unknown> | undefined;
         if (typeof tc.id === "string") entry.id = tc.id;
@@ -323,18 +321,10 @@ export function rebuildAssistantFromOpenAISSE(
 }
 
 /**
- * 非流式响应：choices[0].message 翻译成 ContentBlock[]，注入到 capture 上一个
- * 便于 ConversationTab 复用 Anthropic 路径的位置。
+ * 把非流式翻译结果写进一个合成 SSE 事件，让 rebuildAssistantFromOpenAISSE 能消费。
  *
- * 实现上我们把翻译结果塞进 response._openaiRebuilt，ConversationTab 不需要改
- * （它走 SSE 路径；非流式 OpenAI 响应没有 sse_events，所以 ConversationTab 看到
- * 没有 SSE 时会落到 "no assistant reply" —— 为避免这个，normalizeOpenAICapture
- * 把非流式翻译结果写进一个合成 SSE 事件，让 rebuildAssistantFromOpenAISSE 能消费）。
- *
- * Non-streaming response: translate choices[0].message into ContentBlock[].
- * To let ConversationTab / ResponseTab reuse the SSE rebuild path, we synthesize a
- * single SSE event whose data.choices[0].delta carries the full message — then
- * rebuildAssistantFromOpenAISSE consumes it uniformly.
+ * Synthesize a single SSE event whose data.choices[0].delta carries the full
+ * message — then rebuildAssistantFromOpenAISSE consumes it uniformly.
  */
 function translateNonStreamingBody(body: unknown): { sse_events?: SseEvent[] } {
   if (!body || typeof body !== "object") return {};
