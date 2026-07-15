@@ -107,6 +107,9 @@ export interface CaptureResponse {
 export interface Capture {
   request?: CaptureRequest;
   response?: CaptureResponse;
+  // 协议嗅探标记：由 api.ts 在加载时注入。下游 SseTimeline / ResponseTab 据此分支。
+  // Protocol sniff marker: injected by api.ts at load time. SseTimeline / ResponseTab branch on it.
+  _format?: "openai" | "anthropic";
 }
 
 export interface ListItem {

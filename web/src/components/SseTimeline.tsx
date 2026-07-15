@@ -1,6 +1,34 @@
 import { escapeHtml } from "../lib/format";
-import type { Capture } from "../types";
+import type { Capture, SseEvent } from "../types";
 import EmptyState from "./EmptyState";
+
+// 从 OpenAI chunk 的 data 结构派生事件名 + 颜色类。
+// Derive event-name + color class from the OpenAI chunk's data shape.
+function labelOpenAIChunk(ev: SseEvent): { name: string; cls: string } {
+  if (typeof ev.data === "string") {
+    const trimmed = ev.data.trim();
+    if (trimmed === "[DONE]" || trimmed === '"[DONE]"') {
+      return { name: "[DONE]", cls: "" };
+    }
+    return { name: "—", cls: "" };
+  }
+  const d = ev.data as Record<string, unknown> | undefined;
+  const choices = d?.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return { name: "—", cls: "" };
+  const delta = (choices[0] as Record<string, unknown> | undefined)?.delta as
+    | Record<string, unknown>
+    | undefined;
+  if (!delta) return { name: "—", cls: "" };
+  if (Array.isArray(delta.tool_calls) && delta.tool_calls.length > 0) {
+    const first = delta.tool_calls[0] as Record<string, unknown> | undefined;
+    const idx = typeof first?.index === "number" ? first.index : 0;
+    return { name: `delta.tool_calls[${idx}]`, cls: "tool_use" };
+  }
+  if (typeof delta.content === "string") {
+    return { name: "delta.content", cls: "delta" };
+  }
+  return { name: "—", cls: "" };
+}
 
 interface SseTimelineProps {
   capture: Capture;
@@ -36,14 +64,26 @@ export default function SseTimeline({ capture }: SseTimelineProps) {
       </div>
       <div className="sse-list">
         {events.map((ev, i) => {
-          const name = ev.event || "—";
-          const cls = name.includes("delta")
-            ? "delta"
-            : name.includes("tool")
-              ? "tool_use"
-              : name.includes("error")
-                ? "error"
-                : "";
+          // OpenAI 的 chunk 没有 event: 字段；按 delta 结构合成一个诚实标注的名字，
+          // 而不是伪造 Anthropic 事件名（避免看 raw 时被误导）。
+          // OpenAI chunks carry no event: field; synthesize an honest label from the
+          // delta shape instead of faking Anthropic event names (keeps raw inspection honest).
+          let name: string;
+          let cls: string;
+          if (capture._format === "openai") {
+            const derived = labelOpenAIChunk(ev);
+            name = derived.name;
+            cls = derived.cls;
+          } else {
+            name = ev.event || "—";
+            cls = name.includes("delta")
+              ? "delta"
+              : name.includes("tool")
+                ? "tool_use"
+                : name.includes("error")
+                  ? "error"
+                  : "";
+          }
           const dataStr = typeof ev.data === "string" ? ev.data : JSON.stringify(ev.data);
           const preview =
             dataStr.length > 500

@@ -1,5 +1,6 @@
 import { redactHeaders } from "../lib/redact";
 import { rebuildAssistantFromSSE } from "../lib/sse";
+import { rebuildAssistantFromOpenAISSE } from "../lib/openai";
 import type { Capture } from "../types";
 import EmptyState from "./EmptyState";
 import JsonBlock from "./JsonBlock";
@@ -49,7 +50,12 @@ export default function ResponseTab({ capture }: ResponseTabProps) {
 
       {sse.length > 0 &&
         (() => {
-          const rebuilt = rebuildAssistantFromSSE(sse);
+          // OpenAI 与 Anthropic 用不同的 SSE 重建器，输出都是 ContentBlock[]。
+          // Both rebuilders return ContentBlock[]; branch on _format.
+          const rebuilt =
+            capture._format === "openai"
+              ? rebuildAssistantFromOpenAISSE(sse)
+              : rebuildAssistantFromSSE(sse);
           if (!rebuilt) return null;
           return (
             <>
