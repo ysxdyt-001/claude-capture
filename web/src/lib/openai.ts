@@ -19,6 +19,7 @@ import type {
   ContentBlock,
   Message,
   RequestBody,
+  SseEvent,
   TextBlock,
   ToolUseBlock,
 } from "../types";
@@ -212,4 +213,111 @@ function safeStringify(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+// 流式片段里的 tool_call 增量：按 index 聚合 id/name/arguments 片段。
+// Streaming tool_call deltas: aggregate id/name/arguments fragments by index.
+interface _StreamingToolCall {
+  index: number;
+  id?: string;
+  name?: string;
+  argsBuf: string;
+  firstSeen: number; // 用于输出排序 / for output ordering
+}
+
+/**
+ * 从 OpenAI 的 SSE chunk 序列重建 assistant 的 content blocks。
+ *
+ * Reconstruct assistant content blocks from an OpenAI SSE chunk sequence.
+ *
+ * 规则 / Rules:
+ *   - 所有 delta.content 片段拼到一个 TextBlock
+ *   - delta.tool_calls[] 按 index 聚合：首个片段带 id+name，后续片段只带 arguments 片段
+ *   - data === "[DONE]" 是终止符，忽略
+ *   - 输出顺序固定：[TextBlock?, ...ToolUseBlocks by first-seen index]
+ *     （OpenAI 实际流式里 content 先于 tool_calls，这里固定顺序，Raw JSON tab 是真相）
+ *
+ * Output order is fixed (text-then-tools) regardless of arrival order; the Raw JSON
+ * tab preserves the original chunk sequence as ground truth.
+ */
+export function rebuildAssistantFromOpenAISSE(
+  events: SseEvent[] | undefined,
+): ContentBlock[] | null {
+  if (!events || events.length === 0) return null;
+
+  let textBuf = "";
+  let textSeen = false;
+  const tcByIndex = new Map<number, _StreamingToolCall>();
+  const order: number[] = [];
+  let seq = 0;
+
+  for (const ev of events) {
+    const d = ev.data;
+    // [DONE] 终止符：data 是字符串 "[DONE]"。
+    // [DONE] terminator: data is the string "[DONE]".
+    if (typeof d === "string") {
+      if (d.trim() === "[DONE]") continue;
+      // 其它字符串 data 忽略（OpenAI 不应该出现，但兜底）。
+      // Ignore other string data (shouldn't happen for OpenAI, but be safe).
+      continue;
+    }
+    if (!d || typeof d !== "object") continue;
+
+    const choices = (d as Record<string, unknown>).choices;
+    if (!Array.isArray(choices) || choices.length === 0) continue;
+    const choice0 = choices[0] as Record<string, unknown> | undefined;
+    const delta = choice0?.delta as Record<string, unknown> | undefined;
+    if (!delta) continue;
+
+    if (typeof delta.content === "string" && delta.content.length > 0) {
+      textBuf += delta.content;
+      textSeen = true;
+    }
+
+    const tcs = delta.tool_calls;
+    if (Array.isArray(tcs)) {
+      for (const raw of tcs) {
+        if (!raw || typeof raw !== "object") continue;
+        const tc = raw as Record<string, unknown>;
+        const idx = typeof tc.index === "number" ? tc.index : 0;
+        let entry = tcByIndex.get(idx);
+        if (!entry) {
+          entry = { index: idx, argsBuf: "", firstSeen: seq++ };
+          tcByIndex.set(idx, entry);
+          order.push(idx);
+        }
+        const fn = tc.function as Record<string, unknown> | undefined;
+        if (typeof tc.id === "string") entry.id = tc.id;
+        if (fn && typeof fn.name === "string") entry.name = fn.name;
+        if (fn && typeof fn.arguments === "string") entry.argsBuf += fn.arguments;
+      }
+    }
+  }
+
+  const blocks: ContentBlock[] = [];
+  if (textSeen) {
+    blocks.push({ type: "text", text: textBuf });
+  }
+  // 按 first-seen 顺序输出 tool_use 块；解析失败的 arguments 保留原始字符串。
+  // Emit tool_use blocks in first-seen order; on parse failure keep raw args string.
+  const sorted = [...tcByIndex.values()].sort((a, b) => a.firstSeen - b.firstSeen);
+  for (const entry of sorted) {
+    let input: unknown = entry.argsBuf;
+    if (entry.argsBuf) {
+      try {
+        input = JSON.parse(entry.argsBuf);
+      } catch {
+        /* 保留原始字符串 / keep raw */
+      }
+    }
+    blocks.push({
+      type: "tool_use",
+      id: entry.id ?? "",
+      name: entry.name ?? "",
+      input,
+    });
+  }
+
+  if (blocks.length === 0) return null;
+  return blocks;
 }
