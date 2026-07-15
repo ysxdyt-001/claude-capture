@@ -14,7 +14,14 @@
  * 翻译映射见 docs/superpowers/specs/2026-07-15-openai-completions-support-design.md
  * See the design doc for the full mapping table.
  */
-import type { Capture } from "../types";
+import type {
+  Capture,
+  ContentBlock,
+  Message,
+  RequestBody,
+  TextBlock,
+  ToolUseBlock,
+} from "../types";
 
 /**
  * 嗅探 capture 形状，判定是 OpenAI 规范还是 Anthropic 原生。
@@ -57,4 +64,152 @@ export function detectFormat(capture: Capture): "openai" | "anthropic" {
   }
 
   return "anthropic";
+}
+
+// 把 OpenAI 的 tool_calls（arguments 是 JSON 字符串）转成 Anthropic 的 tool_use 块。
+// Convert OpenAI tool_calls (where arguments is a JSON string) to Anthropic tool_use blocks.
+function translateToolCalls(toolCalls: unknown[]): ToolUseBlock[] {
+  const out: ToolUseBlock[] = [];
+  for (const raw of toolCalls) {
+    if (!raw || typeof raw !== "object") continue;
+    const tc = raw as Record<string, unknown>;
+    const fn = tc.function as Record<string, unknown> | undefined;
+    const id = typeof tc.id === "string" ? tc.id : "";
+    const name = typeof fn?.name === "string" ? fn.name : "";
+    // arguments 通常是 JSON 字符串；解析失败时保留原始字符串，ToolPair 仍能渲染。
+    // arguments is normally a JSON string; on parse failure keep the raw string
+    // so ToolPair still renders something.
+    const argsRaw = typeof fn?.arguments === "string" ? fn.arguments : "";
+    let input: unknown = argsRaw;
+    if (argsRaw) {
+      try {
+        input = JSON.parse(argsRaw);
+      } catch {
+        /* 保留原始字符串 / keep raw string */
+      }
+    }
+    out.push({ type: "tool_use", id, name, input });
+  }
+  return out;
+}
+
+// 规范化 user.content：字符串原样保留；parts[] 只取 {type:"text"} 块。
+// Normalize user.content: keep strings as-is; from parts[] only carry {type:"text"} blocks.
+function translateUserContent(content: unknown): Message["content"] {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    const blocks: TextBlock[] = [];
+    for (const p of content) {
+      if (p && typeof p === "object" && (p as Record<string, unknown>).type === "text") {
+        const text = (p as Record<string, { text?: unknown }>).text;
+        if (typeof text === "string") blocks.push({ type: "text", text });
+      }
+    }
+    return blocks.length > 0 ? blocks : null;
+  }
+  return null;
+}
+
+/**
+ * 翻译 OpenAI 请求体为 Anthropic-shape：
+ *   - role=system 的消息抽出来拼成顶层 system 字符串
+ *   - role=tool 的消息合成 user + tool_result 块（让 buildConversationItems 的配对逻辑生效）
+ *   - assistant.tool_calls → tool_use 块
+ * 详见 design doc 中的 mapping table。
+ *
+ * Translate the OpenAI request body to Anthropic-shape:
+ *   - role=system messages are pulled out and concatenated into top-level `system`
+ *   - role=tool messages are synthesized as user + tool_result blocks (so
+ *     buildConversationItems pairing works unchanged)
+ *   - assistant.tool_calls → tool_use blocks
+ */
+export function translateOpenAIRequest(reqBody: RequestBody): RequestBody {
+  const msgs = Array.isArray(reqBody.messages) ? reqBody.messages : [];
+  const outMessages: Message[] = [];
+  const systemParts: string[] = [];
+
+  for (const m of msgs) {
+    if (!m || typeof m !== "object") continue;
+    const role = (m as Message).role;
+    if (role === "system") {
+      // system 消息内容拼成字符串，进顶层 system。
+      // Concatenate system message contents into the top-level system string.
+      const c = (m as Message).content;
+      const text = typeof c === "string" ? c : c == null ? "" : safeStringify(c);
+      if (text) systemParts.push(text);
+      continue;
+    }
+    if (role === "tool") {
+      // role=tool 的消息合成 user + tool_result 块。tool_call_id ↔ tool_use_id。
+      // Synthesize a user message with a tool_result block. tool_call_id ↔ tool_use_id.
+      const toolCallId = typeof (m as { tool_call_id?: unknown }).tool_call_id === "string"
+        ? ((m as unknown as { tool_call_id: string }).tool_call_id)
+        : "";
+      outMessages.push({
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: toolCallId,
+            content: (m as Message).content ?? null,
+          },
+        ],
+      });
+      continue;
+    }
+    if (role === "assistant") {
+      const toolCalls = (m as { tool_calls?: unknown[] }).tool_calls;
+      const blocks: ContentBlock[] = [];
+      const text = translateUserContent((m as Message).content);
+      if (typeof text === "string" && text.length > 0) {
+        blocks.push({ type: "text", text });
+      } else if (Array.isArray(text)) {
+        for (const b of text) blocks.push(b);
+      }
+      if (Array.isArray(toolCalls)) {
+        for (const tu of translateToolCalls(toolCalls)) blocks.push(tu);
+      }
+      outMessages.push({
+        role: "assistant",
+        content: blocks.length > 0 ? blocks : null,
+      });
+      continue;
+    }
+    // user / 其他：直接透传 content 规范化结果。
+    // user / other: pass through with normalized content.
+    outMessages.push({
+      role: (role as string) || "user",
+      content: translateUserContent((m as Message).content),
+    });
+  }
+
+  // tools: [{type:"function", function:{name, parameters}}] → [{name, ...}]
+  // 保留原始 function.parameters 以便 Raw JSON 仍可查看。
+  // Rewrite tools so the "declared" counter keeps working; preserve parameters for Raw JSON.
+  let tools = reqBody.tools;
+  if (Array.isArray(tools)) {
+    tools = tools.map((t) => {
+      const fn = (t as { function?: Record<string, unknown> })?.function;
+      if (fn && typeof fn.name === "string") {
+        return { name: fn.name, ...(t as object) };
+      }
+      return t;
+    });
+  }
+
+  const out: RequestBody = { ...reqBody, messages: outMessages, tools };
+  if (systemParts.length > 0) {
+    out.system = systemParts.join("\n\n");
+  } else {
+    delete out.system;
+  }
+  return out;
+}
+
+function safeStringify(v: unknown): string {
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
 }
