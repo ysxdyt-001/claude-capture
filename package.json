@@ -1,6 +1,6 @@
 {
   "name": "claude-capture",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Capture and inspect Claude Code ↔ Anthropic HTTP traffic via mitmproxy, with a built-in viewer UI.",
   "bin": {
     "claude-capture": "bin/claude-capture.mjs"
